@@ -50,10 +50,14 @@ describe('基本設定:初始狀態', () => {
 });
 
 describe('基本設定:Project', () => {
-  it('用名稱和開始日建立 Project,Requester 預設為「自己」、手動優先級預設 3', () => {
+  it('用名稱、Requester 和開始日建立 Project,手動優先級預設 3', () => {
     const ctx = { now: at('2026-09-15T09:30:00+08:00'), newId: sequentialIds() };
 
-    const state = applyOk(createInitialState(ctx), { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15' }, ctx);
+    const state = applyOk(
+      createInitialState(ctx),
+      { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15', requesterId: 'req_self' },
+      ctx,
+    );
 
     expect(state.projects.filter((p) => p.kind === 'project')).toEqual([
       {
@@ -76,12 +80,13 @@ describe('基本設定:Project', () => {
   });
 
   it.each([
-    ['名稱空白', { name: '   ', startDate: '2026-09-15' }, 'invalid_name'],
-    ['開始日格式錯誤', { name: 'A', startDate: '2026/09/15' }, 'invalid_date'],
-    ['截止日早於開始日', { name: 'A', startDate: '2026-09-15', endDate: '2026-09-10' }, 'invalid_date_range'],
-    ['手動優先級小於 1', { name: 'A', startDate: '2026-09-15', manualPriority: 0 }, 'invalid_manual_priority'],
-    ['手動優先級大於 5', { name: 'A', startDate: '2026-09-15', manualPriority: 6 }, 'invalid_manual_priority'],
-    ['手動優先級不是整數', { name: 'A', startDate: '2026-09-15', manualPriority: 2.5 }, 'invalid_manual_priority'],
+    ['名稱空白', { name: '   ', startDate: '2026-09-15', requesterId: 'req_self' }, 'invalid_name'],
+    ['開始日格式錯誤', { name: 'A', startDate: '2026/09/15', requesterId: 'req_self' }, 'invalid_date'],
+    ['截止日早於開始日', { name: 'A', startDate: '2026-09-15', endDate: '2026-09-10', requesterId: 'req_self' }, 'invalid_date_range'],
+    ['手動優先級小於 1', { name: 'A', startDate: '2026-09-15', manualPriority: 0, requesterId: 'req_self' }, 'invalid_manual_priority'],
+    ['手動優先級大於 5', { name: 'A', startDate: '2026-09-15', manualPriority: 6, requesterId: 'req_self' }, 'invalid_manual_priority'],
+    ['手動優先級不是整數', { name: 'A', startDate: '2026-09-15', manualPriority: 2.5, requesterId: 'req_self' }, 'invalid_manual_priority'],
+    ['沒有選 Requester', { name: 'A', startDate: '2026-09-15', requesterId: '' }, 'requester_required'],
     ['Requester 不存在', { name: 'A', startDate: '2026-09-15', requesterId: 'req_nobody' }, 'requester_not_found'],
   ])('%s時拒絕建立 Project 並回傳原因', (_label, input, code) => {
     const ctx = { now: at('2026-09-15T09:30:00+08:00'), newId: sequentialIds() };
@@ -98,7 +103,11 @@ describe('基本設定:Project', () => {
   function stateWithOneProject() {
     const ids = sequentialIds();
     const ctx = { now: at('2026-09-15T09:30:00+08:00'), newId: ids };
-    const state = applyOk(createInitialState(ctx), { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15' }, ctx);
+    const state = applyOk(
+      createInitialState(ctx),
+      { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15', requesterId: 'req_self' },
+      ctx,
+    );
     return { state, ids };
   }
 
@@ -169,7 +178,11 @@ describe('基本設定:Task', () => {
   function stateWithProject() {
     const ids = sequentialIds();
     const ctx = { now: at('2026-09-15T09:30:00+08:00'), newId: ids };
-    const state = applyOk(createInitialState(ctx), { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15' }, ctx);
+    const state = applyOk(
+      createInitialState(ctx),
+      { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15', requesterId: 'req_self' },
+      ctx,
+    );
     return { state, ids };
   }
 
@@ -344,13 +357,17 @@ describe('基本設定:Project 的 Requester 與權重', () => {
   });
 
   const overrideErrorCases: [string, Command][] = [
-    ['建立時', { type: 'createProject', name: 'A', startDate: '2026-09-15', requesterWeightOverride: 0 }],
+    ['建立時', { type: 'createProject', name: 'A', startDate: '2026-09-15', requesterId: 'req_self', requesterWeightOverride: 0 }],
     ['修改時', { type: 'updateProject', projectId: 'prj_1', requesterWeightOverride: 6 }],
   ];
 
   it.each(overrideErrorCases)('%s Requester 權重超出 1–5 會被拒絕', (_label, command) => {
     const ctx = { now: at('2026-09-15T09:00:00+08:00'), newId: sequentialIds() };
-    const state = applyOk(createInitialState(ctx), { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15' }, ctx);
+    const state = applyOk(
+      createInitialState(ctx),
+      { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15', requesterId: 'req_self' },
+      ctx,
+    );
 
     const result = apply(state, command, ctx);
 

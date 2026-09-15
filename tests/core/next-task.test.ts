@@ -135,8 +135,8 @@ describe('基本功能:現在該做什麼(分數相同)', () => {
     const ids = sequentialIds();
     const ctx = (iso: string) => ({ now: at(iso), newId: ids });
     let state = createInitialState(ctx('2026-09-15T08:00:00+08:00'));
-    state = applyOk(state, { type: 'createProject', name: '後建立', startDate: '2026-09-15' }, ctx('2026-09-15T10:00:00+08:00'));
-    state = applyOk(state, { type: 'createProject', name: '先建立', startDate: '2026-09-15' }, ctx('2026-09-15T09:00:00+08:00'));
+    state = applyOk(state, { type: 'createProject', name: '後建立', startDate: '2026-09-15', requesterId: 'req_self' }, ctx('2026-09-15T10:00:00+08:00'));
+    state = applyOk(state, { type: 'createProject', name: '先建立', startDate: '2026-09-15', requesterId: 'req_self' }, ctx('2026-09-15T09:00:00+08:00'));
     state = applyOk(state, { type: 'createTask', projectId: 'prj_1', title: 'A' }, ctx('2026-09-15T10:00:00+08:00'));
     state = applyOk(state, { type: 'createTask', projectId: 'prj_2', title: 'B' }, ctx('2026-09-15T10:00:00+08:00'));
 

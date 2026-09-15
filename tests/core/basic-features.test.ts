@@ -7,7 +7,7 @@ function setup() {
   const ctx = (iso: string) => ({ now: at(iso), newId: ids });
   const morning = ctx('2026-09-15T09:00:00+08:00');
   let state = createInitialState(morning);
-  state = applyOk(state, { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15' }, morning);
+  state = applyOk(state, { type: 'createProject', name: '會員系統重構', startDate: '2026-09-15', requesterId: 'req_self' }, morning);
   state = applyOk(state, { type: 'createTask', projectId: 'prj_1', title: '登入流程' }, morning);
   state = applyOk(state, { type: 'createTask', projectId: 'prj_1', title: '權限 bug' }, morning);
   return { state, ctx };

@@ -1,7 +1,6 @@
 import { applyRequesterCommand, type RequesterCommand } from './requesters';
 import { type CommandResult, fail, succeed } from './result';
 import { applySessionCommand, type SessionCommand } from './sessions';
-import { SELF_REQUESTER_ID } from './state';
 import { formatTimestamp } from './time';
 import type { AppState, Context, DateString, Project, Task } from './types';
 import { isValidDate, isWeight } from './validation';
@@ -14,7 +13,7 @@ type ProjectCommand =
       name: string;
       startDate: DateString;
       endDate?: DateString | null;
-      requesterId?: string;
+      requesterId: string;
       requesterWeightOverride?: number | null;
       manualPriority?: number;
     }
@@ -56,6 +55,9 @@ function validateProjectFields(state: AppState, fields: ProjectFields): CommandR
   if (fields.manualPriority === null || !isWeight(fields.manualPriority)) {
     return fail('invalid_manual_priority', '手動優先級必須是 1 到 5 的整數');
   }
+  if (!fields.requesterId) {
+    return fail('requester_required', '請選擇 Requester;沒有人交辦的工作請選「自己」');
+  }
   if (!state.requesters.some((r) => r.id === fields.requesterId && r.status === 'active')) {
     return fail('requester_not_found', '找不到這個 Requester');
   }
@@ -85,7 +87,7 @@ export function apply(state: AppState, command: Command, ctx: Context): CommandR
         name: command.name.trim(),
         startDate: command.startDate,
         endDate: command.endDate ?? null,
-        requesterId: command.requesterId ?? SELF_REQUESTER_ID,
+        requesterId: command.requesterId,
         requesterWeightOverride: command.requesterWeightOverride ?? null,
         manualPriority: command.manualPriority ?? 3,
       };
