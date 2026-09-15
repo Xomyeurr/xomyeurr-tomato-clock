@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE · 番茄鐘主畫面介面變體</title>
+<!--
+  PROTOTYPE:用完即丟,不要併進正式程式碼。
+  要回答的問題:擴充套件的主畫面應該長什麼樣?
+  計畫:兩種結構不同的主畫面,用 ?variant=A|B 切換(畫面底部的切換列,或鍵盤 ← →)。
+    A Popup 專注卡:點工具列圖示跳出的小視窗,一次只給一件事(使用者選定為平常主要使用的畫面)
+    B 側邊欄時間軸:Chrome 側邊欄常駐,今天的時間一條線看完
+  第一輪另有 C 完整規劃頁(整頁專案表格),使用者決定不保留,已移除。
+  假資料寫死在程式裡,狀態只存在記憶體,重新整理就會重置。
+  「下一步」只是簡化的假邏輯(保底優先,其次權重),不是正式規則。番茄鐘 25 分鐘只是暫定值。
+-->
+<style>
+:root{
+  --bg:#eef0f3; --surface:#fff; --ink:#1d2330; --muted:#6b7280; --line:#e3e6eb;
+  --tomato:#e5533d; --tomato-soft:#fdeae6; --adhoc:#7c5cd6; --adhoc-soft:#f1ecfc;
+  --ok:#2f9e6b; --ok-soft:#e5f5ed; --warn:#9a5b00; --warn-soft:#fff3dc;
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 system-ui,"Noto Sans TC","Microsoft JhengHei",sans-serif;color:var(--ink);background:var(--bg)}
+button{font:inherit;cursor:pointer;color:inherit}
+button:disabled{cursor:not-allowed;opacity:.45}
+.small{font-size:12px}
+.muted{color:var(--muted)}
+.center{text-align:center}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.between{justify-content:space-between}
+.grow{flex:1}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 12px}
+.btn-sm{padding:3px 10px;font-size:13px}
+.btn-primary{background:var(--tomato);border-color:var(--tomato);color:#fff}
+.btn-adhoc{background:var(--adhoc);border-color:var(--adhoc);color:#fff;white-space:nowrap}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--tomato-soft);color:#b23a26;white-space:nowrap}
+.chip-adhoc{background:var(--adhoc-soft);color:var(--adhoc)}
+.chip-warn{background:var(--warn-soft);color:var(--warn)}
+.chip-ok{background:var(--ok-soft);color:var(--ok)}
+.warn-ico{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--warn);color:#fff;font-size:11px;font-weight:700;margin-right:4px}
+textarea,input[type=text]{font:inherit;width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff;color:var(--ink)}
+.slots{display:flex;gap:3px}
+.slot{flex:1;height:8px;border-radius:3px;background:var(--line)}
+.slot.planned{background:var(--tomato)}
+.slot.adhoc{background:var(--adhoc)}
+.slot.now{background:repeating-linear-gradient(45deg,var(--tomato) 0 4px,var(--tomato-soft) 4px 8px)}
+.picker{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.picker-hint{font-size:12px;color:var(--muted);padding:6px 10px;background:#fafbfc;border-bottom:1px solid var(--line)}
+.picker button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:#fff;padding:8px 10px}
+.picker button:last-child{border-bottom:0}
+.picker button:hover{background:var(--tomato-soft)}
+.note{display:flex;flex-direction:column;gap:8px}
+.check{display:flex;gap:6px;align-items:center}
+.label{font-size:12px;letter-spacing:.08em;color:var(--muted)}
+
+/* A:Popup 專注卡 */
+.a-stage{min-height:100vh;display:flex;justify-content:center;padding:32px 16px 96px}
+.a-hint{font-size:12px;color:var(--muted);margin-bottom:8px;text-align:center}
+.a-popup{width:360px;max-width:100%;background:var(--surface);border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.18);overflow:hidden;display:flex;flex-direction:column;min-height:560px}
+.a-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 8px}
+.a-cap button{width:22px;height:22px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:0;line-height:1;margin-left:2px}
+.a-bar{padding:0 14px 10px}
+.a-warn{margin:0 14px 6px;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer}
+.a-warn-detail{margin-top:6px;color:#6b4200}
+.a-main{flex:1;padding:8px 18px 18px;display:flex;flex-direction:column;justify-content:center;gap:10px}
+.a-title{font-size:20px;font-weight:700;line-height:1.35}
+.a-start{padding:14px;font-size:16px;border-radius:12px}
+.a-ring{width:200px;height:200px;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:conic-gradient(var(--tomato) calc(var(--p)*1%),var(--tomato-soft) 0)}
+.a-ring-inner{width:172px;height:172px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:42px;font-weight:700;font-variant-numeric:tabular-nums}
+.a-adhoc{padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:6px;background:var(--adhoc-soft)}
+.a-foot{display:flex;border-top:1px solid var(--line)}
+.a-foot button{flex:1;border:0;background:#fff;padding:10px;color:var(--muted)}
+.a-foot button+button{border-left:1px solid var(--line)}
+
+/* B:側邊欄時間軸 */
+.b-stage{display:flex;min-height:100vh}
+.b-page{flex:1;min-width:0;background:#dfe3e8;display:flex;flex-direction:column}
+.b-tabs{height:34px;background:#cfd4db}
+.b-url{margin:6px 10px;background:#fff;border-radius:999px;padding:4px 14px;font-size:12px;color:var(--muted)}
+.b-fake{margin:16px;display:grid;gap:10px}
+.b-fake div{background:#fff;border-radius:6px;height:60px;opacity:.7}
+.b-caption{margin:0 16px;font-size:12px;color:var(--muted)}
+.b-panel{width:380px;max-width:100%;background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+@media (max-width:720px){.b-page{display:none}.b-panel{width:100%}}
+.b-head{padding:12px 14px 8px;border-bottom:1px solid var(--line)}
+.b-head .mini{width:22px;height:22px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:0;line-height:1;margin-left:2px}
+.b-banner{background:var(--warn-soft);color:#6b4200;border-radius:8px;padding:6px 10px;font-size:12px;margin-top:8px}
+.b-scroll{flex:1;overflow:auto;padding:10px 14px}
+.b-tl{list-style:none;margin:0;padding:0;position:relative}
+.b-tl::before{content:"";position:absolute;left:59px;top:8px;bottom:8px;width:2px;background:var(--line)}
+.b-row{display:grid;grid-template-columns:44px 30px minmax(0,1fr);padding:6px 0;align-items:start}
+.b-time{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;padding-top:1px}
+.b-dot{width:12px;height:12px;border-radius:50%;background:var(--tomato);margin:4px auto 0;position:relative;z-index:1;outline:3px solid #fff}
+.b-dot.adhoc{background:var(--adhoc)}
+.b-dot.future{background:#fff;border:2px solid #cfd4db}
+.b-dot.now{box-shadow:0 0 0 5px var(--tomato-soft)}
+.b-now{background:var(--tomato-soft);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.b-title{font-weight:700}
+.b-timer{font-size:22px;font-variant-numeric:tabular-nums}
+.b-note{font-size:12px;color:var(--muted)}
+.b-future{opacity:.55}
+.b-progress{height:6px;background:#fff;border-radius:3px;overflow:hidden}
+.b-progress i{display:block;height:100%;width:calc(var(--p)*1%);background:var(--tomato)}
+.b-compose{border-top:1px solid var(--line);padding:10px 14px 72px;background:var(--adhoc-soft);display:flex;flex-direction:column;gap:6px}
+
+/* 原型切換列:不屬於被評估的設計 */
+.proto-switcher{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:#111;color:#fff;border-radius:999px;padding:6px;box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:1000;font-size:13px;max-width:calc(100% - 32px)}
+.proto-switcher button{background:#2c2c2c;color:#fff;border:0;border-radius:999px;width:32px;height:32px;font-size:18px;line-height:1;flex:none}
+.proto-switcher span{padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proto-tag{background:#ffd400;color:#111;border-radius:999px;padding:1px 8px;font-weight:700;font-size:11px;margin-right:6px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="proto-switcher" role="toolbar" aria-label="原型切換">
+  <button type="button" data-sw="-1" aria-label="上一個變體">‹</button>
+  <span id="sw-label"></span>
+  <button type="button" data-sw="1" aria-label="下一個變體">›</button>
+</div>
+<script>
+const DAY = 86400000;
+const TODAY = new Date(2026, 8, 15);
+const day = n => new Date(TODAY.getTime() + n * DAY);
+const fmt = d => `${d.getMonth() + 1}/${d.getDate()}`;
+const pad = n => String(n).padStart(2, '0');
+const mmss = s => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const state = {
+  capacity: 8,
+  projects: [
+    { id: 'p1', name: '會員系統重構', requester: '老闆', weight: 0.82, deadline: day(5), effortTotal: 14, effortLeft: 9, mustStartBy: day(-2), guaranteed: true, risk: { late: 2, capacityPct: 78 } },
+    { id: 'p2', name: '報表匯出 API', requester: '同事 A', weight: 0.64, deadline: day(12), effortTotal: 10, effortLeft: 7, mustStartBy: day(3), guaranteed: false, risk: null },
+    { id: 'p3', name: '部門文件整理', requester: '自己', weight: 0.31, deadline: null, effortTotal: 6, effortLeft: 5, mustStartBy: null, guaranteed: false, risk: null },
+    { id: 'bucket', name: '臨時工作區', adhoc: true },
+  ],
+  tasks: [
+    { id: 't1', projectId: 'p1', title: '登入流程改用新的 token 驗證', done: false, sessions: 2 },
+    { id: 't2', projectId: 'p1', title: '修 code review 抓到的權限相關 bug', done: false, sessions: 0 },
+    { id: 't3', projectId: 'p2', title: '匯出欄位規格與分頁設計', done: false, sessions: 1 },
+    { id: 't4', projectId: 'p3', title: '整理部署流程說明', done: false, sessions: 0 },
+    { id: 't5', projectId: 'bucket', title: '協助查線上訂單異常', done: true, sessions: 1 },
+  ],
+  log: [
+    { taskId: 't1', time: '09:10', note: 'token 解析完成,refresh 還沒做', planned: true },
+    { taskId: 't5', time: '09:40', note: '原因是快取過期,已回報', planned: false },
+    { taskId: 't3', time: '10:15', note: '和同事 A 對過欄位', planned: true },
+  ],
+  guaranteeMet: {},
+  overrides: [],
+  running: null,
+  noteFor: null,
+  pickerOpen: false,
+  adhocOpen: false,
+  warnOpen: false,
+};
+
+const proj = id => state.projects.find(p => p.id === id);
+const task = id => state.tasks.find(t => t.id === id);
+const used = () => state.log.length;
+const adhocUsed = () => state.log.filter(l => !l.planned).length;
+const pct = () => state.running ? Math.round((1 - state.running.left / state.running.total) * 100) : 0;
+const needsGuarantee = p => p.guaranteed && !state.guaranteeMet[p.id];
+const score = t => { const p = proj(t.projectId); return (needsGuarantee(p) ? 10 : 0) + p.weight; };
+const ranked = () => state.tasks.filter(t => !t.done && !proj(t.projectId).adhoc).sort((a, b) => score(b) - score(a));
+const risks = () => state.projects.filter(p => p.risk);
+
+function recommend() {
+  const t = ranked()[0];
+  if (!t) return null;
+  const p = proj(t.projectId);
+  return { task: t, reason: needsGuarantee(p) ? '已過最晚開始日 · 今日保底' : `排程權重最高 ${p.weight.toFixed(2)}` };
+}
+
+function upcoming(skip) {
+  const list = ranked();
+  const n = Math.max(0, state.capacity - used() - 1);
+  return list.length ? Array.from({ length: n }, (_, i) => list[(i + skip) % list.length]) : [];
+}
+
+function riskText(p) {
+  const parts = [];
+  if (p.risk.late > 0) parts.push(`預估比截止日晚 ${p.risk.late} 天`);
+  if (p.risk.capacityPct < 100) parts.push(`可投入時間只有剩餘工作量的 ${p.risk.capacityPct}%`);
+  return parts.join(';');
+}
+
+function slotsHtml() {
+  const kinds = state.log.map(l => l.planned ? 'planned' : 'adhoc');
+  if (state.running || state.noteFor) kinds.push('now');
+  while (kinds.length < state.capacity) kinds.push('');
+  return `<div class="slots">${kinds.map(k => `<div class="slot ${k}"></div>`).join('')}</div>`;
+}
+
+function pickerList(excludeId) {
+  const others = ranked().filter(t => t.id !== excludeId);
+  if (!others.length) return '';
+  return `<div class="picker"><div class="picker-hint">改做別的會存一筆調整紀錄</div>${others.map(t =>
+    `<button type="button" data-act="start" data-arg="${t.id}">${esc(t.title)}<div class="small muted">${esc(proj(t.projectId).name)}</div></button>`).join('')}</div>`;
+}
+
+function noteBlock() {
+  const t = task(state.noteFor), p = proj(t.projectId);
+  return `<div class="note">
+    <div class="label">番茄鐘結束</div>
+    <div><span class="chip ${p.adhoc ? 'chip-adhoc' : ''}">${esc(p.name)}</span> <b>${esc(t.title)}</b></div>
+    <label class="muted small" for="note">這一段做了什麼?結果如何?</label>
+    <textarea id="note" rows="3" placeholder="一句話就好"></textarea>
+    <label class="check small"><input id="done" type="checkbox"> 這個 Task 做完了</label>
+    <button type="button" class="btn btn-primary" data-act="save">儲存,看下一步</button>
+  </div>`;
+}
+
+function VariantA() {
+  const rec = recommend(), r = risks();
+  let main;
+  if (state.running) {
+    const t = task(state.running.taskId), p = proj(t.projectId);
+    main = `<div class="label center">專注中</div>
+      <div class="a-ring" data-progress style="--p:${pct()}"><div class="a-ring-inner" data-timer>${mmss(state.running.left)}</div></div>
+      <div class="center"><span class="chip ${p.adhoc ? 'chip-adhoc' : ''}">${esc(p.name)}</span><div class="a-title">${esc(t.title)}</div></div>
+      <div class="row"><button type="button" class="btn" data-act="abandon">放棄</button><button type="button" class="btn btn-primary grow" data-act="ff">快轉到結束(原型用)</button></div>`;
+  } else if (state.noteFor) {
+    main = noteBlock();
+  } else if (rec) {
+    const p = proj(rec.task.projectId);
+    main = `<div class="label">現在該做</div>
+      <div class="muted">${esc(p.name)} · ${esc(p.requester)}</div>
+      <div class="a-title">${esc(rec.task.title)}</div>
+      <div><span class="chip">${rec.reason}</span></div>
+      <button type="button" class="btn btn-primary a-start" data-act="start" data-arg="${rec.task.id}">開始 25 分鐘</button>
+      <button type="button" class="btn btn-ghost" data-act="picker">${state.pickerOpen ? '收起' : '換一個'}</button>
+      ${state.pickerOpen ? pickerList(rec.task.id) : ''}`;
+  } else {
+    main = `<div class="a-title center">今天規劃的工作都做完了</div>`;
+  }
+  return `<div class="a-stage"><div>
+    <div class="a-hint">模擬點工具列圖示跳出的 popup(360px 寬,點視窗外面就會關閉)</div>
+    <div class="a-popup">
+      <header class="a-head"><strong>番茄鐘小助理</strong>
+        <span class="a-cap small">今日 ${used()} / ${state.capacity}<button type="button" data-act="cap" data-arg="-1" aria-label="減少今日產能">−</button><button type="button" data-act="cap" data-arg="1" aria-label="增加今日產能">+</button></span></header>
+      <div class="a-bar">${slotsHtml()}</div>
+      ${r.length ? `<div class="a-warn" role="button" data-act="warn"><span class="warn-ico">!</span>${r.length} 個專案可能逾期 ${state.warnOpen ? '▴' : '▾'}
+        ${state.warnOpen ? r.map(p => `<div class="a-warn-detail"><b>${esc(p.name)}</b>:${riskText(p)}</div>`).join('') : ''}</div>` : ''}
+      <main class="a-main">${main}</main>
+      ${state.adhocOpen ? `<div class="a-adhoc"><input id="adhoc" type="text" placeholder="臨時工作名稱,Enter 立即開始"><button type="button" class="btn btn-adhoc" data-act="adhoc">開始</button></div>` : ''}
+      <footer class="a-foot"><button type="button" data-act="toggleAdhoc">+ 臨時工作</button><button type="button" data-act="goto" data-arg="B">開啟側邊欄</button></footer>
+    </div>
+  </div></div>`;
+}
+
+function VariantB() {
+  const rec = recommend(), r = risks();
+  const past = state.log.map(l => {
+    const t = task(l.taskId), p = proj(t.projectId);
+    return `<li class="b-row"><div class="b-time">${l.time}</div><div class="b-dot ${l.planned ? '' : 'adhoc'}"></div>
+      <div><b>${esc(t.title)}</b><div class="small muted">${l.planned ? esc(p.name) : '<span class="chip chip-adhoc">臨時</span>'}</div><div class="b-note">「${esc(l.note)}」</div></div></li>`;
+  }).join('');
+  let now;
+  if (state.running) {
+    const t = task(state.running.taskId), p = proj(t.projectId);
+    now = `<div class="b-now">
+      <div class="row between"><span class="chip ${p.adhoc ? 'chip-adhoc' : ''}">${esc(p.name)}</span><b class="b-timer" data-timer>${mmss(state.running.left)}</b></div>
+      <div class="b-title">${esc(t.title)}</div>
+      <div class="b-progress" data-progress style="--p:${pct()}"><i></i></div>
+      <div class="row"><button type="button" class="btn btn-sm" data-act="abandon">放棄</button><button type="button" class="btn btn-sm btn-primary" data-act="ff">快轉到結束(原型用)</button></div></div>`;
+  } else if (state.noteFor) {
+    now = `<div class="b-now">${noteBlock()}</div>`;
+  } else if (rec) {
+    const p = proj(rec.task.projectId);
+    now = `<div class="b-now">
+      <div class="small muted">下一件 · ${esc(p.name)}</div>
+      <div class="b-title">${esc(rec.task.title)}</div>
+      <div><span class="chip">${rec.reason}</span></div>
+      <div class="row"><button type="button" class="btn btn-sm btn-primary" data-act="start" data-arg="${rec.task.id}">開始</button><button type="button" class="btn btn-sm btn-ghost" data-act="picker">${state.pickerOpen ? '收起' : '換一個'}</button></div>
+      ${state.pickerOpen ? pickerList(rec.task.id) : ''}</div>`;
+  } else {
+    now = `<div class="b-now">規劃內的工作都做完了</div>`;
+  }
+  const skip = rec && !state.running && !state.noteFor ? 1 : 0;
+  const future = upcoming(skip).map(t => `<li class="b-row b-future"><div class="b-time">預估</div><div class="b-dot future"></div>
+    <div>${esc(t.title)}<div class="small muted">${esc(proj(t.projectId).name)}</div></div></li>`).join('');
+  return `<div class="b-stage">
+    <div class="b-page" aria-hidden="true"><div class="b-tabs"></div><div class="b-url">jira.company.local/browse/MEM-128</div>
+      <div class="b-fake"><div></div><div></div><div style="height:180px"></div><div></div></div>
+      <div class="b-caption">模擬一邊看工單、一邊開著 Chrome 側邊欄</div></div>
+    <aside class="b-panel">
+      <header class="b-head">
+        <div class="row between"><b>今天 9/15(二)</b><span class="small">剩 ${Math.max(0, state.capacity - used())} 個番茄鐘<button type="button" class="mini" data-act="cap" data-arg="-1" aria-label="減少今日產能">−</button><button type="button" class="mini" data-act="cap" data-arg="1" aria-label="增加今日產能">+</button></span></div>
+        ${r.map(p => `<div class="b-banner"><span class="warn-ico">!</span><b>${esc(p.name)}</b> 可能逾期:${riskText(p)}</div>`).join('')}
+      </header>
+      <div class="b-scroll"><ol class="b-tl">
+        ${past}
+        <li class="b-row"><div class="b-time">現在</div><div class="b-dot now"></div><div>${now}</div></li>
+        ${future}
+        <li class="b-row"><div class="b-time">18:00</div><div class="b-dot future"></div><div class="small muted">下班</div></li>
+      </ol></div>
+      <footer class="b-compose">
+        <label class="small" for="adhoc">臨時被交辦?輸入後按 Enter 立即開始</label>
+        <div class="row" style="flex-wrap:nowrap"><input id="adhoc" type="text" placeholder="例如:幫忙查線上錯誤"><button type="button" class="btn btn-adhoc" data-act="adhoc">開始</button></div>
+      </footer>
+    </aside>
+  </div>`;
+}
+
+const VARIANTS = [
+  { key: 'A', name: 'Popup 專注卡', render: VariantA },
+  { key: 'B', name: '側邊欄時間軸', render: VariantB },
+];
+let current = Math.max(0, VARIANTS.findIndex(v => v.key === new URLSearchParams(location.search).get('variant')));
+
+const actions = {
+  start(id) {
+    if (state.noteFor) return;
+    const t = task(id), isAdhoc = proj(t.projectId).adhoc;
+    if (state.running && !isAdhoc) return;
+    const rec = recommend();
+    if (rec && rec.task.id !== id && !isAdhoc) state.overrides.push({ suggested: rec.task.id, actual: id, at: nowHM() });
+    state.running = { taskId: id, left: 1500, total: 1500 };
+    state.pickerOpen = false;
+  },
+  ff() { if (state.running) { state.noteFor = state.running.taskId; state.running = null; } },
+  abandon() { state.running = null; },
+  save() {
+    const t = task(state.noteFor), p = proj(t.projectId);
+    state.log.push({ taskId: t.id, time: nowHM(), note: ($('#note').value || '').trim() || '(沒有填備註)', planned: !p.adhoc });
+    t.sessions++;
+    if ($('#done').checked) t.done = true;
+    if (!p.adhoc) { p.effortLeft = Math.max(0, p.effortLeft - 1); if (p.guaranteed) state.guaranteeMet[p.id] = true; }
+    state.noteFor = null;
+  },
+  adhoc() {
+    const input = $('#adhoc'), title = (input && input.value || '').trim();
+    if (!title || state.noteFor) return;
+    input.value = '';
+    const id = 't' + Date.now();
+    state.tasks.push({ id, projectId: 'bucket', title, done: false, sessions: 0 });
+    state.adhocOpen = false;
+    actions.start(id);
+  },
+  cap(d) { state.capacity = Math.max(1, state.capacity + Number(d)); },
+  picker() { state.pickerOpen = !state.pickerOpen; },
+  toggleAdhoc() { state.adhocOpen = !state.adhocOpen; },
+  warn() { state.warnOpen = !state.warnOpen; },
+  goto(key) { go(VARIANTS.findIndex(v => v.key === key)); },
+};
+
+function render() {
+  const keep = { note: $('#note')?.value, done: $('#done')?.checked, adhoc: $('#adhoc')?.value };
+  const v = VARIANTS[current];
+  $('#root').innerHTML = v.render();
+  $('#sw-label').innerHTML = `<span class="proto-tag">PROTOTYPE</span>${v.key} · ${v.name}(${current + 1}/${VARIANTS.length})`;
+  if ($('#note') && keep.note != null) $('#note').value = keep.note;
+  if ($('#done') && keep.done != null) $('#done').checked = keep.done;
+  if ($('#adhoc') && keep.adhoc != null) $('#adhoc').value = keep.adhoc;
+  if (v.key === 'A' && state.adhocOpen) $('#adhoc')?.focus();
+}
+
+function go(index) {
+  current = (index + VARIANTS.length) % VARIANTS.length;
+  const params = new URLSearchParams(location.search);
+  params.set('variant', VARIANTS[current].key);
+  history.replaceState(null, '', `${location.pathname}?${params}`);
+  render();
+}
+
+document.addEventListener('click', e => {
+  const sw = e.target.closest('[data-sw]');
+  if (sw) return go(current + Number(sw.dataset.sw));
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  actions[el.dataset.act](el.dataset.arg);
+  render();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'adhoc' && e.key === 'Enter') { actions.adhoc(); render(); return; }
+  if (e.target.closest('input, textarea, [contenteditable]')) return;
+  if (e.key === 'ArrowLeft') go(current - 1);
+  if (e.key === 'ArrowRight') go(current + 1);
+});
+
+setInterval(() => {
+  if (!state.running) return;
+  state.running.left--;
+  if (state.running.left <= 0) { actions.ff(); render(); return; }
+  document.querySelectorAll('[data-timer]').forEach(el => { el.textContent = mmss(state.running.left); });
+  document.querySelectorAll('[data-progress]').forEach(el => el.style.setProperty('--p', pct()));
+}, 1000);
+
+go(current);
+</script>
+</body>
+</html>
