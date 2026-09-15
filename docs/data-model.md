@@ -1,6 +1,6 @@
-# Phase 1 資料結構(草案)
+# Phase 1 資料結構
 
-> 狀態:**草案,等你確認。** 標示「預設值」的數字都可以改。術語的定義見 [CONTEXT.md](../CONTEXT.md)。
+> 狀態:**已確認。** 實作時如果需要調整,就更新這份文件並提高 `schemaVersion`。術語的定義見 [CONTEXT.md](../CONTEXT.md)。
 
 ## 基本規則
 
@@ -16,7 +16,7 @@
 
 ```mermaid
 erDiagram
-  Requester |o--o{ Project : "委託"
+  Requester ||--o{ Project : "委託"
   Project ||--o{ Task : "包含"
   Task ||--o{ WorkSession : "花掉的時間"
   Project |o--o{ Commitment : "可以連結"
@@ -45,7 +45,7 @@ data/
 - 「目前狀態」類的資料一種一個檔;「每天持續增加的紀錄」按月份分檔。月份依紀錄本身的時間決定(工作時段看 `startedAt`、時段看 `date`、調整紀錄看 `at`)。
 - `chrome.storage.local` 用同樣的切法當鍵名,例如 `projects`、`sessions/2026-09`。匯出時一個鍵對應一個檔案。
 - 清單類的檔案格式是 `{ "schemaVersion": 1, "items": [ ... ] }`。
-- **匯出時機(預設值)**:資料有變動後 30 秒內匯出一次。
+- **匯出時機**:資料有變動後 30 秒內匯出一次。
 - Phase 2 會多一個放建議(Proposal)的收件匣資料夾,Phase 1 不建立。
 
 ## 各資料的欄位
@@ -56,11 +56,11 @@ data/
 {
   "schemaVersion": 1,
   "timezone": "Asia/Taipei",
-  "pomodoro": { "focusMinutes": 25, "breakMinutes": 5 },
-  "freeTimer": { "maxMinutes": 120 },
-  "scheduleWeightFactors": { "deadlineUrgency": 0.4, "requester": 0.3, "manualPriority": 0.3 },
-  "mustStartBy": { "safetyBufferWorkdays": 1, "guaranteedMinutesPerDay": 25 },
-  "deadlineRisk": { "lateDays": 0, "availablePercent": 100 },
+  "pomodoro": { "focusMinutes": 50, "breakMinutes": 10 },
+  "freeTimer": { "maxMinutes": 150 },
+  "scheduleWeightFactors": { "deadlineUrgency": 0.5, "requester": 0.25, "manualPriority": 0.25 },
+  "mustStartBy": { "safetyBufferWorkdays": 1, "guaranteedMinutesPerDay": 50 },
+  "deadlineRisk": { "lateDays": 0, "availablePercent": 120 },
   "updatedAt": "2026-09-15T09:00:00+08:00"
 }
 ```
@@ -68,13 +68,13 @@ data/
 | 欄位 | 說明 |
 |---|---|
 | `timezone` | 判斷「今天」是哪一天用的時區 |
-| `pomodoro.focusMinutes` / `breakMinutes` | 番茄鐘專注和休息的長度。預設值 25 / 5 |
-| `freeTimer.maxMinutes` | 碼錶自動停止的上限。預設值 120;超過當天下班時間也會停 |
-| `scheduleWeightFactors` | 三個權重因子的比例,加起來等於 1。預設值 0.4 / 0.3 / 0.3。Phase 3 自動調整的就是這組數字 |
-| `mustStartBy.safetyBufferWorkdays` | 算出最晚開始日後,再往前多留幾個工作日。預設值 1 |
-| `mustStartBy.guaranteedMinutesPerDay` | 過了最晚開始日,每天保證分到的時間。預設值 25 |
-| `deadlineRisk.lateDays` | 預估完成日比截止日晚超過幾天就預警。預設值 0 |
-| `deadlineRisk.availablePercent` | 截止日前可投入的時間,低於剩餘工作量的百分之幾就預警。預設值 100,也就是時間一不夠就提醒 |
+| `pomodoro.focusMinutes` / `breakMinutes` | 番茄鐘專注和休息的長度:50 / 10 |
+| `freeTimer.maxMinutes` | 碼錶自動停止的上限:150;超過當天下班時間也會停 |
+| `scheduleWeightFactors` | 三個權重因子的比例,加起來等於 1:0.5 / 0.25 / 0.25,截止日比較重。Phase 3 自動調整的就是這組數字 |
+| `mustStartBy.safetyBufferWorkdays` | 算出最晚開始日後,再往前多留幾個工作日:1 |
+| `mustStartBy.guaranteedMinutesPerDay` | 過了最晚開始日,每天保證分到的時間:50,剛好一個番茄鐘 |
+| `deadlineRisk.lateDays` | 預估完成日比截止日晚超過幾天就預警:0 |
+| `deadlineRisk.availablePercent` | 截止日前可投入的時間,低於剩餘工作量的百分之幾就預警:120,也就是可用時間比剩餘工作量多不到兩成就提醒 |
 
 ### `requesters.json`:委託人
 
@@ -86,6 +86,8 @@ data/
 | `status` | `active` / `archived` | |
 | `createdAt` / `updatedAt` | 時間點 | |
 
+系統預設建立一筆「自己」:`id` 固定是 `req_self`,權重先設 3,可以修改,但不能封存。沒有人交辦的工作就選它。
+
 ### `projects.json`:專案
 
 | 欄位 | 型別 | 說明 |
@@ -93,7 +95,7 @@ data/
 | `id` | 字串 | 臨時工作區固定是 `interrupt-bucket` |
 | `kind` | `project` / `interruptBucket` | 臨時工作區只有一筆,由系統建立 |
 | `name` | 字串 | |
-| `requesterId` | 字串或 `null` | 沒有委託人時,委託人因子用中間值 3 |
+| `requesterId` | 字串 | 必填。沒有人交辦的工作選「自己」(`req_self`) |
 | `requesterWeightOverride` | 1–5 或 `null` | 這個專案另外調整的委託人權重 |
 | `manualPriority` | 1–5 | 手動優先級,預設 3 |
 | `startDate` | 日期 | |
@@ -127,14 +129,14 @@ data/
   "taskId": "tsk_a91x0",
   "mode": "pomodoro",
   "startedAt": "2026-09-15T10:00:00+08:00",
-  "endedAt": "2026-09-15T10:25:00+08:00",
+  "endedAt": "2026-09-15T10:50:00+08:00",
   "outcome": "completed",
   "adHoc": false,
   "interruptedBySessionId": null,
   "endTimeUnconfirmed": false,
   "note": "token 解析完成,refresh 還沒做",
   "createdAt": "2026-09-15T10:00:00+08:00",
-  "updatedAt": "2026-09-15T10:25:40+08:00"
+  "updatedAt": "2026-09-15T10:50:40+08:00"
 }
 ```
 
@@ -151,7 +153,7 @@ data/
 
 - 計時中的時段也會馬上存下來,瀏覽器關掉再打開也不會遺失。
 - 番茄鐘的休息時間不另外記錄,它只是「沒在工作」的時間。
-- Phase 1 的計時不支援暫停(預設值),按停止就是結束。
+- Phase 1 的計時不支援暫停,按停止就是結束。
 
 ### `commitments.json`:固定行程
 
@@ -185,7 +187,8 @@ data/
 | `skippedDates` | 日期陣列 | 取消了某一次。要改某一次的時間,就取消那一次,再新增一筆單次行程 |
 | `status` | `active` / `archived` | |
 
-固定行程照排定的時間計算,不需要事後確認有沒有真的開(預設值)。
+- 固定行程照排定的時間計算,不需要事後確認。整場取消的話,就把那天加進 `skippedDates`。
+- 實際的工作時段和行程時間重疊時(例如會議提早結束,你馬上開始工作),重疊的部分算工作時間,不會重複扣掉可用時間。
 
 ### `work-hours.json`:每週工時範本和單日調整
 
@@ -266,9 +269,9 @@ data/
 
 | 值 | 怎麼算 |
 |---|---|
-| 某天可用時間 | 當天的工時時段(有單日調整就用調整後的)扣掉當天的固定行程 |
+| 某天可用時間 | 當天的工時時段(有單日調整就用調整後的)扣掉當天的固定行程;行程和實際工作時段重疊的部分不扣 |
 | 專案已花時間 | 專案底下所有 Task 的工作時段加總,包含中途放棄和被中斷的實際時間 |
-| 專案總投入時間(週報用) | 已花時間,加上連結這個專案的固定行程時間 |
+| 專案總投入時間(週報用) | 已花時間,加上連結這個專案的固定行程時間(和工作時段重疊的部分只算一次) |
 | 剩餘工作量 | `effortEstimateMinutes` 減掉已花時間。小於等於 0 而專案還沒完成時,提醒你重新估計 |
 | 最晚開始日 | 從截止日往回,逐日累加每天的可用時間,累加到足夠剩餘工作量的那一天,再往前推 `safetyBufferWorkdays` 個工作日 |
 | 截止日緊迫度 | 由剩餘工作量和截止日前的可用時間算出,公式在實作排程引擎時決定 |
@@ -276,18 +279,4 @@ data/
 | 逾期預警 | 預估完成日比截止日晚超過 `lateDays` 天,或截止日前的可用時間低於剩餘工作量的 `availablePercent`% |
 | 建議時段、下一個 Task | 排程引擎依上面這些數值即時產生 |
 
-**注意:** 最晚開始日和逾期預警目前用「整天的可用時間」估算,沒有扣掉其他專案會用掉的份額,算出來會偏樂觀。實作排程引擎時要決定是否改用分配給該專案的時間。
-
-## 需要你確認的預設值
-
-- 番茄鐘專注 25 分鐘、休息 5 分鐘,不做長休息 Ans:讓我專注50分鐘休息10分鐘
-- 碼錶上限 120 分鐘,超過當天下班時間也會自動停止 Ans: 上限給到150分鐘
-- Phase 1 的計時不支援暫停 Ans: 不支援
-- 過了最晚開始日,每天保底 25 分鐘;最晚開始日再往前留 1 個工作日緩衝
-- 權重比例:截止日緊迫度 0.4、委託人 0.3、手動優先級 0.3
-- 逾期預警:延遲 0 天、時間不足 100%;兩個門檻都能在單一專案另外設定
-- 沒有委託人的專案,委託人因子用中間值 3
-- 資料變動後 30 秒內匯出到 `./data`
-- 中途放棄、被中斷的實際時間,也算進專案已花時間
-- 固定行程照排定的時間計算,不用事後確認
-- 拖動建議時段就等於鎖定
+**注意:** 最晚開始日和逾期預警目前用「整天的可用時間」估算,沒有扣掉其他專案會用掉的份額,算出來會偏樂觀。目前先用 120% 的預警門檻抵銷;實作排程引擎時再決定是否改用分配給該專案的時間。
