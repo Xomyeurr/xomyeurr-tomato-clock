@@ -1,6 +1,6 @@
 # AGENTS.md
 
-單人使用的時間管理 Chrome 擴充套件(Manifest V3):專案規劃,加上番茄鐘、碼錶、事後補登、固定行程和時段規劃。設計已定案,還沒有程式碼。
+單人使用的時間管理 Chrome 擴充套件(Manifest V3):專案規劃,加上番茄鐘、碼錶、事後補登、固定行程和時段規劃。批次 1 已實作:TypeScript、Vitest、esbuild;時間管理核心在 `src/core`,Chrome 擴充套件相關程式在 `src/extension`。
 
 ## 開始工作前
 

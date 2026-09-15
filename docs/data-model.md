@@ -144,7 +144,7 @@ data/
 |---|---|---|
 | `taskId` | 字串 | 一定屬於一個 Task |
 | `mode` | `pomodoro` / `freeTimer` / `retroactive` | 番茄鐘、碼錶、事後補登 |
-| `startedAt` / `endedAt` | 時間點 | 實際開始和結束的時間,花了多久由兩者相減,不另外存。補登時由你輸入。計時中的時段 `endedAt` 是 `null` |
+| `startedAt` / `endedAt` | 時間點 | 實際開始和結束的時間,花了多久由兩者相減,不另外存。補登時由你輸入。計時中的時段 `endedAt` 是 `null`。番茄鐘的 `endedAt` 最晚是「開始時間 + 專注長度」:時間到了才回來寫備註,或到期後才按放棄,都記成到期的時間 |
 | `outcome` | `completed` / `abandoned` / `interrupted` 或 `null` | 做完、中途放棄、被臨時工作插隊。計時中是 `null` |
 | `adHoc` | 布林 | 記錄當下是不是臨時工作。之後就算 Task 升級成正式專案也不改,統計結果才不會變動 |
 | `interruptedBySessionId` | 字串或 `null` | 被插隊時,指向插隊的那段工作時段 |

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "番茄鐘時間管理小助理",
+  "version": "0.1.0",
+  "description": "把專案規劃和每天的時間接在一起,告訴你現在該做什麼。",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "番茄鐘時間管理小助理",
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "sidePanel", "alarms"]
+}

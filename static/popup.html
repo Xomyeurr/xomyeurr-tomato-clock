@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>番茄鐘時間管理小助理</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { width: 360px; min-height: 480px; }
+    main { padding: 14px; }
+    .tight { gap: 2px; }
+    .center { text-align: center; }
+    .task-title { font-size: 18px; line-height: 1.35; }
+    .countdown { font-size: 44px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+    button.big { padding: 12px; font-size: 16px; border-radius: 10px; }
+    .check { color: var(--ink); font-size: 14px; }
+    .check input { width: auto; margin: 0; }
+    .task-choice { width: 100%; text-align: left; display: flex; flex-direction: column; border: 0; background: transparent; padding: 4px 0; }
+    .task-choice:hover { color: var(--tomato); }
+    .footer { justify-content: space-between; border-top: 1px solid var(--line); padding-top: 8px; }
+  </style>
+</head>
+<body>
+  <main id="app"><h1>番茄鐘時間管理小助理</h1></main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
