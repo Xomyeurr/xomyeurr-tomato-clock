@@ -35,3 +35,17 @@
 - 資料欄位、檔案格式改變:更新 docs/data-model.md,並提高 `schemaVersion`
 - 做出難以回頭、有取捨,而且沒有背景說明會讓人看不懂的決定:在 `docs/adr/` 新增一筆 ADR
 - 範圍、階段有變動,或「還沒決定的事」有了結論:更新 README.md
+
+## Agent skills
+
+### Issue tracker
+
+Issue 和規格放在 GitHub Issues(`Xomyeurr/xomyeurr-tomato-clock`),用 `gh` 操作。詳見 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用預設的五個分類標籤:`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。詳見 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+單一情境:根目錄一份 `CONTEXT.md`,決策紀錄放在 `docs/adr/`。詳見 `docs/agents/domain.md`。
