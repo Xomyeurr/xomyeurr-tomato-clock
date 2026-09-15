@@ -61,6 +61,7 @@ export interface WorkSession {
   id: string;
   taskId: string;
   mode: 'pomodoro' | 'freeTimer' | 'retroactive';
+  durationMinutes?: number | null;
   startedAt: Timestamp;
   endedAt: Timestamp | null;
   outcome: 'completed' | 'abandoned' | 'interrupted' | null;
@@ -80,7 +81,31 @@ export interface Override {
   actual: { taskId: string };
 }
 
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+export interface TimeRange { start: string; end: string }
+export interface WorkHours {
+  weekly: Record<Weekday, TimeRange[]>;
+  dayOverrides: Record<DateString, TimeRange[]>;
+  updatedAt: Timestamp;
+}
+
+export type CommitmentSchedule =
+  | { type: 'once'; date: DateString; start: string; end: string }
+  | { type: 'weekly'; weekdays: Weekday[]; start: string; end: string; fromDate: DateString; untilDate: DateString | null };
+export interface Commitment {
+  id: string;
+  title: string;
+  projectId: string | null;
+  schedule: CommitmentSchedule;
+  skippedDates: DateString[];
+  status: 'active' | 'archived';
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export interface AppState {
+  commitments: Commitment[];
+  workHours: WorkHours;
   settings: Settings;
   requesters: Requester[];
   projects: Project[];

@@ -27,3 +27,20 @@ export function formatTimestamp(date: Date, timeZone: string): Timestamp {
     `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
   );
 }
+
+/** Resolve a local wall clock in the configured IANA timezone; reject nonexistent DST times. */
+export function localDateTime(date: string, time: string, timeZone: string): Date {
+  const wall = `${date}T${time.length === 5 ? `${time}:00` : time}`;
+  const target = Date.parse(`${wall}Z`);
+  let candidate = target;
+  for (let i = 0; i < 4; i++) {
+    const local = formatTimestamp(new Date(candidate), timeZone).slice(0, 19);
+    if (local === wall) return new Date(candidate);
+    candidate += target - Date.parse(`${local}Z`);
+  }
+  throw new Error('此時區沒有這個本地時間');
+}
+
+export function nextDate(date: string): string {
+  return new Date(Date.parse(`${date}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}

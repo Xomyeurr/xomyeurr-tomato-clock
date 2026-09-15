@@ -42,3 +42,23 @@ export function weightSelect(selected: number | null, inheritLabel?: string): HT
 export function field(text: string, control: HTMLElement): HTMLLabelElement {
   return h('label', {}, text, control);
 }
+
+/** Preserve typed drafts and open sections when storage or the clock refreshes a view. */
+export function preserveDrafts(root: HTMLElement): () => void {
+  const values = Array.from(root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input[id], select[id], textarea[id]'))
+    .map(el => ({ id: el.id, value: el.value, checked: el instanceof HTMLInputElement ? el.checked : false }));
+  const open = Array.from(root.querySelectorAll<HTMLDetailsElement>('details[id]')).map(el => ({ id: el.id, open: el.open }));
+  const activeId = root.contains(document.activeElement) ? document.activeElement?.id : null;
+  return () => {
+    for (const saved of values) {
+      const el = document.getElementById(saved.id);
+      if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+        if (el instanceof HTMLSelectElement && !Array.from(el.options).some(o => o.value === saved.value)) continue;
+        el.value = saved.value;
+        if (el instanceof HTMLInputElement) el.checked = saved.checked;
+      }
+    }
+    for (const saved of open) { const el = document.getElementById(saved.id); if (el instanceof HTMLDetailsElement) el.open = saved.open; }
+    if (activeId) document.getElementById(activeId)?.focus();
+  };
+}

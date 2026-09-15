@@ -2,6 +2,16 @@
 
 > 狀態:**已確認。** 實作時如果需要調整,就更新這份文件並提高 `schemaVersion`。術語的定義見 [CONTEXT.md](../CONTEXT.md)。
 
+## 批次 2：schemaVersion 2
+
+- 新增持久化的 `work-hours` 與 `commitments` 鍵；AppState 的 `workHours` 對應儲存鍵 `work-hours`。
+- v1 資料首次載入時保留既有設定、Requester、Project、Task、Work Session 和 Override，補入預設週工時與空行程。遷移與所有指令讀寫共用擴充套件來源的 Web Lock，避免不同頁面覆寫彼此的更新。
+- Work Session 新增 `durationMinutes`：Free Timer 使用者指定的到期提示長度；`null` 或舊紀錄缺少此欄位代表未設定長度。到期只提示，實際結束由手動結束或自動停止決定。
+- Free Timer 上限與下班時間仍即時計算，不另存計算結果。Chrome 鬧鐘、啟動及讀取資料時都會補做自動停止；即使關閉瀏覽器，也只記到應停止的時間。
+- 無上班時段的日子使用 150 分鐘上限；開始時已超過當天最後下班時間則立即停止、等待確認。需要繼續工作時可先延後當天下班時間。
+- 今日統計按設定時區的午夜切分，跨日工作分配到各天；工作優先於重疊的行程，重疊行程本身只計一次。「行程已用」僅計現在以前；「剩餘可用時間」僅計現在以後的上班時段，扣除未來行程，不會再扣一次已過去的工作。
+- 本地時間遇到夏令時間跳過的不存在時刻會拒絕；重複時刻由時區轉換規則選取一個對應時間，儲存時保留 UTC offset。
+
 ## 基本規則
 
 - **只有擴充套件會寫入資料。** 資料以 `chrome.storage.local` 為準,再單向匯出到 `./data`;AI 只讀(見 [ADR 0002](./adr/0002-storage-and-ai-readable-sync.md)、[ADR 0003](./adr/0003-ai-changes-via-proposal-inbox.md))。
@@ -44,7 +54,7 @@ data/
 
 - 「目前狀態」類的資料一種一個檔;「每天持續增加的紀錄」按月份分檔。月份依紀錄本身的時間決定(工作時段看 `startedAt`、時段看 `date`、調整紀錄看 `at`)。
 - `chrome.storage.local` 用同樣的切法當鍵名,例如 `projects`、`sessions/2026-09`。匯出時一個鍵對應一個檔案。
-- 清單類的檔案格式是 `{ "schemaVersion": 1, "items": [ ... ] }`。
+- 清單類的檔案格式是 `{ "schemaVersion": 2, "items": [ ... ] }`。
 - **匯出時機**:資料有變動後 30 秒內匯出一次。
 - Phase 2 會多一個放建議(Proposal)的收件匣資料夾,Phase 1 不建立。
 
@@ -54,7 +64,7 @@ data/
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "timezone": "Asia/Taipei",
   "pomodoro": { "focusMinutes": 50, "breakMinutes": 10 },
   "freeTimer": { "maxMinutes": 150 },
@@ -144,6 +154,7 @@ data/
 |---|---|---|
 | `taskId` | 字串 | 一定屬於一個 Task |
 | `mode` | `pomodoro` / `freeTimer` / `retroactive` | 番茄鐘、碼錶、事後補登 |
+| `durationMinutes` | 正數或 `null`（舊資料可省略） | Free Timer 自訂到期提示分鐘數；留白作碼錶，不改變自動停止上限 |
 | `startedAt` / `endedAt` | 時間點 | 實際開始和結束的時間,花了多久由兩者相減,不另外存。補登時由你輸入。計時中的時段 `endedAt` 是 `null`。番茄鐘的 `endedAt` 最晚是「開始時間 + 專注長度」:時間到了才回來寫備註,或到期後才按放棄,都記成到期的時間 |
 | `outcome` | `completed` / `abandoned` / `interrupted` 或 `null` | 做完、中途放棄、被臨時工作插隊。計時中是 `null` |
 | `adHoc` | 布林 | 記錄當下是不是臨時工作。之後就算 Task 升級成正式專案也不改,統計結果才不會變動 |
@@ -194,7 +205,7 @@ data/
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "weekly": {
     "mon": [{ "start": "09:00", "end": "12:00" }, { "start": "13:00", "end": "18:00" }],
     "tue": [{ "start": "09:00", "end": "12:00" }, { "start": "13:00", "end": "18:00" }],

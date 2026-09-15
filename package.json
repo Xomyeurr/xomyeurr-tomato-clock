@@ -1,6 +1,6 @@
 {
   "name": "tomato-clock-time-manager",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "單人使用的時間管理 Chrome 擴充套件",

@@ -1,6 +1,7 @@
 import { type AppState, type Command, getNextTask, getStartableTasks, getTimerStatus } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
-import { h } from '../ui';
+import { field, h, preserveDrafts } from '../ui';
+import { summaryView, retroactiveForm, confirmationViews } from '../daily-ui';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let errorMessage: string | null = null;
@@ -17,7 +18,7 @@ async function send(command: Command): Promise<void> {
   const result = await runCommand(command);
   errorMessage = result.ok ? null : result.error.message;
   if (result.ok) showOtherTasks = false;
-  await render();
+  await render(!result.ok);
 }
 
 function projectName(state: AppState, projectId: string): string {
@@ -34,43 +35,18 @@ function runningView(state: AppState): HTMLElement {
     h('strong', { className: 'task-title' }, running.taskTitle),
   );
 
-  if (running.isDue) {
-    const note = h('textarea', { rows: 3, placeholder: '這一段做了什麼?結果如何?(可以空白)' });
-    const complete = h('input', { type: 'checkbox' });
-    return h(
-      'section',
-      { className: 'card stack' },
-      h('span', { className: 'chip' }, '時間到了!'),
-      title,
-      note,
-      h('label', { className: 'row check' }, complete, '這個 Task 做完了'),
-      h(
-        'button',
-        {
-          type: 'button',
-          className: 'primary big',
-          onclick: () => void send({ type: 'finishSession', note: note.value, completeTask: complete.checked }),
-        },
-        '完成這個番茄鐘',
-      ),
-    );
-  }
-
-  const reason = h('input', { type: 'text', placeholder: '放棄的原因(可以空白)' });
-  return h(
-    'section',
-    { className: 'card stack' },
-    h('span', { className: 'muted small' }, '專注中'),
-    title,
-    h('div', { className: 'countdown', 'data-due': running.dueAt }, mmss(running.remainingSeconds)),
-    h('div', { className: 'muted small center' }, `預計 ${clock(running.dueAt)} 結束`),
-    h(
-      'div',
-      { className: 'row' },
-      h('div', { className: 'grow' }, reason),
-      h('button', { type: 'button', onclick: () => void send({ type: 'abandonSession', note: reason.value }) }, '放棄'),
-    ),
-  );
+  const note = h('textarea', { id: `running-note-${running.sessionId}`, rows: 2, placeholder: '這一段做了什麼？（可以空白）' });
+  const complete = h('input', { id: `running-complete-${running.sessionId}`, type: 'checkbox' });
+  const canFinish = running.isDue || running.mode === 'freeTimer';
+  return h('section', { className: 'card stack' },
+    h('span', { className: 'chip' }, running.isDue ? '時間到了！' : running.mode === 'freeTimer' ? '碼錶計時中' : '專注中'), title,
+    h('div', { className: 'countdown', 'data-due': running.dueAt ?? undefined, 'data-start': running.dueAt ? undefined : running.startedAt }, mmss(running.dueAt ? running.remainingSeconds : (running.elapsedSeconds ?? 0))),
+    h('div', { className: 'muted small center' }, running.dueAt ? `預計 ${clock(running.dueAt)} 到期` : '未設定長度'),
+    running.autoStopAt ? h('div', { className: 'muted small', 'data-auto-stop': running.autoStopAt }, `最晚 ${clock(running.autoStopAt)} 自動停止並請你確認`) : null,
+    note,
+    canFinish ? h('label', { className: 'row check' }, complete, '這個 Task 做完了') : null,
+    canFinish ? h('button', { type: 'button', className: 'primary', onclick: () => void send({ type: 'finishSession', note: note.value, completeTask: complete.checked }) }, '完成這段工作') : null,
+    h('button', { type: 'button', onclick: () => void send({ type: 'abandonSession', note: note.value }) }, '放棄'));
 }
 
 function otherTaskList(state: AppState, excludeTaskId: string | null): HTMLElement {
@@ -164,34 +140,49 @@ function footer(): HTMLElement {
   );
 }
 
-async function render(): Promise<void> {
-  const state = await loadState();
-  const { running } = getTimerStatus(state, new Date());
-  app.replaceChildren(
-    h(
-      'div',
-      { className: 'stack' },
-      h('header', {}, h('strong', {}, '番茄鐘小助理')),
-      errorMessage ? h('div', { className: 'error', role: 'alert' }, errorMessage) : null,
-      running ? runningView(state) : idleView(state),
-      footer(),
-    ),
-  );
+function freeTimerForm(state: AppState): HTMLElement | null {
+  const tasks = getStartableTasks(state);
+  if (!tasks.length) return null;
+  const task = h('select', { id: 'free-task' }, ...tasks.map(t => h('option', { value: t.id }, `${projectName(state, t.projectId)} / ${t.title}`)));
+  task.value = getNextTask(state, new Date())?.taskId ?? tasks[0]!.id;
+  const duration = h('input', { id: 'free-duration', type: 'number', min: 1, max: state.settings.freeTimer.maxMinutes, placeholder: '留白當碼錶' });
+  return h('details', { className: 'card', id: 'free-details' }, h('summary', {}, '使用碼錶 / 自訂長度'),
+    h('form', { className: 'stack', onsubmit: (event: Event) => {
+      event.preventDefault(); void send({ type: 'startFreeTimer', taskId: task.value, durationMinutes: duration.value ? Number(duration.value) : null });
+    } }, field('Task', task), field('長度（分鐘）', duration), h('button', { type: 'submit' }, '開始碼錶')));
 }
-
+function adHocForm(): HTMLElement {
+  const title = h('input', { id: 'adhoc-title', type: 'text', required: true, placeholder: '臨時工作名稱' });
+  return h('form', { className: 'card stack', onsubmit: (event: Event) => {
+    event.preventDefault(); void send({ type: 'insertAdHocTask', title: title.value });
+  } }, field('插入臨時工作', title), h('button', { type: 'submit' }, '立即插入並計時'));
+}
+let currentState: AppState | null = null;
+async function render(preserve = true): Promise<void> {
+  const state = await loadState();
+  const restore = preserve ? preserveDrafts(app) : () => {};
+  currentState = state;
+  const { running } = getTimerStatus(state, new Date());
+  app.replaceChildren(h('div', { className: 'stack' },
+    h('header', {}, h('strong', {}, '番茄鐘小助理')),
+    errorMessage ? h('div', { className: 'error', role: 'alert' }, errorMessage) : null,
+    summaryView(state, send), ...confirmationViews(state, send), running ? runningView(state) : idleView(state),
+    running ? null : freeTimerForm(state), adHocForm(), retroactiveForm(state, send), footer()));
+  restore();
+}
 setInterval(() => {
-  const countdown = app.querySelector<HTMLElement>('[data-due]');
+  const countdown = app.querySelector<HTMLElement>('[data-due], [data-start]');
   if (countdown?.dataset.due) {
     const remaining = Math.ceil((Date.parse(countdown.dataset.due) - Date.now()) / 1000);
-    if (remaining <= 0) void render();
-    else countdown.textContent = mmss(remaining);
-  }
-  const breakBanner = app.querySelector<HTMLElement>('[data-break-ends]');
-  if (breakBanner?.dataset.breakEnds && Date.parse(breakBanner.dataset.breakEnds) <= Date.now()) void render();
+    if (remaining <= 0 && countdown.textContent !== '00:00') void render();
+    else countdown.textContent = mmss(Math.max(0, remaining));
+  } else if (countdown?.dataset.start) countdown.textContent = mmss(Math.max(0, Math.floor((Date.now() - Date.parse(countdown.dataset.start)) / 1000)));
+  const stop = app.querySelector<HTMLElement>('[data-auto-stop]')?.dataset.autoStop;
+  if (stop && Date.parse(stop) <= Date.now()) void render();
+  const breakEnd = app.querySelector<HTMLElement>('[data-break-ends]')?.dataset.breakEnds;
+  if (breakEnd && Date.parse(breakEnd) <= Date.now()) void render();
+  if (currentState) app.querySelector('[data-summary]')?.replaceWith(summaryView(currentState, send));
 }, 1000);
-
-void chrome.windows.getCurrent().then((w) => {
-  windowId = w.id;
-});
+void chrome.windows.getCurrent().then(w => { windowId = w.id; });
 void render();
 onStateChanged(() => void render());

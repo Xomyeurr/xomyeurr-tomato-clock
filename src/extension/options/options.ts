@@ -1,3 +1,4 @@
+import { workHoursSection, commitmentsSection } from './day-settings';
 import { type AppState, type Command, type Project, type Requester, SELF_REQUESTER_ID, type Task } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
 import { field, h, todayIn, weightSelect } from '../ui';
@@ -292,6 +293,8 @@ async function render(): Promise<void> {
       { className: 'stack' },
       h('h1', {}, '設定'),
       errorMessage ? h('div', { className: 'error', role: 'alert' }, errorMessage) : null,
+      workHoursSection(state, send),
+      commitmentsSection(state, send),
       requesterSection(state),
       projectSection(state),
       doneProjectSection(state),
@@ -300,4 +303,6 @@ async function render(): Promise<void> {
 }
 
 void render();
-onStateChanged(() => void render());
+onStateChanged(() => {
+  if (!app.contains(document.activeElement) || !document.activeElement?.matches('input, textarea, select')) void render();
+});

@@ -1,30 +1,25 @@
 import { getTimerStatus } from '../core';
 import { loadState, onStateChanged } from './storage';
 
-const DUE_ALARM = 'pomodoro-due';
-
+const TIMER_ALARM = 'timer-wakeup';
 async function refreshTimerIndicator(): Promise<void> {
   const state = await loadState();
-  const { running } = getTimerStatus(state, new Date());
-
-  if (running && !running.isDue) {
-    await chrome.alarms.create(DUE_ALARM, { when: Date.parse(running.dueAt) });
-    await chrome.action.setBadgeText({ text: '' });
-    return;
-  }
-
-  await chrome.alarms.clear(DUE_ALARM);
-  if (running?.isDue) {
-    await chrome.action.setBadgeBackgroundColor({ color: '#e5533d' });
-    await chrome.action.setBadgeText({ text: '!' });
-  } else {
-    await chrome.action.setBadgeText({ text: '' });
-  }
+  const now = new Date();
+  const { running } = getTimerStatus(state, now);
+  const wakeups = [running?.dueAt, running?.autoStopAt]
+    .filter((time): time is string => !!time && Date.parse(time) > now.getTime()).map(Date.parse);
+  if (wakeups.length) await chrome.alarms.create(TIMER_ALARM, { when: Math.min(...wakeups) });
+  else await chrome.alarms.clear(TIMER_ALARM);
+  const attention = running?.isDue || state.sessions.some(s => s.endTimeUnconfirmed);
+  if (attention) await chrome.action.setBadgeBackgroundColor({ color: '#e5533d' });
+  await chrome.action.setBadgeText({ text: attention ? '!' : '' });
 }
-
-chrome.runtime.onInstalled.addListener(() => void refreshTimerIndicator());
-chrome.runtime.onStartup.addListener(() => void refreshTimerIndicator());
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === DUE_ALARM) void refreshTimerIndicator();
-});
-onStateChanged(() => void refreshTimerIndicator());
+let refreshing = Promise.resolve();
+function refresh(): void {
+  refreshing = refreshing.then(refreshTimerIndicator).catch(console.error);
+}
+chrome.runtime.onInstalled.addListener(refresh);
+chrome.runtime.onStartup.addListener(refresh);
+chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === TIMER_ALARM || alarm.name === 'pomodoro-due') refresh(); });
+onStateChanged(refresh);
+refresh();

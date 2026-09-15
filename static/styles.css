@@ -68,3 +68,17 @@ label > input, label > select, label > textarea { margin-top: 2px; color: var(--
 .list > li:first-child { border-top: 0; }
 .done-text { text-decoration: line-through; color: var(--muted); }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 12px; }
+
+input[type="time"], input[type="datetime-local"], input[type="number"] {
+  width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: #fff;
+}
+.timeline-entry { border-left: 4px solid var(--ok); }
+.timeline-entry.workHours { border-left-color: var(--muted); background: #f0f2f5; }
+.timeline-entry.commitment { border-left-color: #3a77a8; }
+.timeline-entry.abandoned { border-left-color: var(--danger); border-left-style: dashed; }
+.timeline-entry.interrupted { border-left-color: var(--warn); border-left-style: dashed; }
+.timeline-entry.running.session { border-left-color: var(--tomato); }
+.timeline-entry.adhoc { background: #f4efff; }
+.session-note { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+details > summary { cursor: pointer; }
+details[open] > summary { margin-bottom: 12px; }

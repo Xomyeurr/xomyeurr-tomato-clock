@@ -18,3 +18,12 @@ export type {
   Timestamp,
   WorkSession,
 } from './types';
+
+export { getDaySummary, getWorkRanges } from './day';
+export type { TimeRange, WorkHours, Weekday } from './types';
+
+export { getCommitmentsForDate } from './commitments';
+export type { Commitment, CommitmentSchedule } from './types';
+export { getDayTimeline } from './timeline';
+export type { TimelineEntry } from './timeline';
+export { formatTimestamp, localDateTime } from './time';

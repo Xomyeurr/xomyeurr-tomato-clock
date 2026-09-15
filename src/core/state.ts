@@ -38,6 +38,18 @@ export function createInitialState(ctx: Context): AppState {
         updatedAt: ts,
       },
     ],
+    workHours: {
+      weekly: {
+        mon: [{ start: '09:00', end: '12:00' }, { start: '13:00', end: '18:00' }],
+        tue: [{ start: '09:00', end: '12:00' }, { start: '13:00', end: '18:00' }],
+        wed: [{ start: '09:00', end: '12:00' }, { start: '13:00', end: '18:00' }],
+        thu: [{ start: '09:00', end: '12:00' }, { start: '13:00', end: '18:00' }],
+        fri: [{ start: '09:00', end: '12:00' }, { start: '13:00', end: '18:00' }],
+        sat: [], sun: [],
+      },
+      dayOverrides: {}, updatedAt: ts,
+    },
+    commitments: [],
     tasks: [],
     sessions: [],
     overrides: [],

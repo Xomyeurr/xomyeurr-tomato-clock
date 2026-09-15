@@ -1,6 +1,8 @@
+import { applyCommitmentCommand, type CommitmentCommand } from './commitments';
+import { applyWorkHoursCommand, type WorkHoursCommand } from './work-hours';
 import { applyRequesterCommand, type RequesterCommand } from './requesters';
 import { type CommandResult, fail, succeed } from './result';
-import { applySessionCommand, type SessionCommand } from './sessions';
+import { applySessionCommand, reconcileTimers, type SessionCommand } from './sessions';
 import { formatTimestamp } from './time';
 import type { AppState, Context, DateString, Project, Task } from './types';
 import { isValidDate, isWeight } from './validation';
@@ -34,7 +36,7 @@ type TaskCommand =
   | { type: 'updateTask'; taskId: string; title: string }
   | { type: 'completeTask'; taskId: string };
 
-export type Command = ProjectCommand | TaskCommand | RequesterCommand | SessionCommand;
+export type Command = ProjectCommand | TaskCommand | RequesterCommand | SessionCommand | WorkHoursCommand | CommitmentCommand;
 
 type ProjectFields = Pick<
   Project,
@@ -80,6 +82,7 @@ function replaceTask(state: AppState, taskId: string, patch: Partial<Task>): App
 }
 
 export function apply(state: AppState, command: Command, ctx: Context): CommandResult {
+  state = reconcileTimers(state, ctx.now);
   const ts = formatTimestamp(ctx.now, state.settings.timezone);
   switch (command.type) {
     case 'createProject': {
@@ -181,6 +184,18 @@ export function apply(state: AppState, command: Command, ctx: Context): CommandR
       if (task.status === 'done') return fail('task_already_done', '這個 Task 已經標記完成了');
       return succeed(replaceTask(state, task.id, { status: 'done', doneAt: ts, updatedAt: ts }));
     }
+
+    case 'createCommitment':
+    case 'updateCommitment':
+    case 'archiveCommitment':
+    case 'skipCommitment':
+      return applyCommitmentCommand(state, command, ctx);
+
+    case 'setDayWorkHours':
+    case 'setWeeklyWorkHours':
+    case 'resetDayWorkHours':
+    case 'shiftWorkdayEnd':
+      return applyWorkHoursCommand(state, command, ctx);
 
     case 'createRequester':
     case 'updateRequester':

@@ -1,11 +1,34 @@
-const app = document.querySelector<HTMLElement>('#app');
+import { type Command, getDayTimeline } from '../../core';
+import { loadState, onStateChanged, runCommand } from '../storage';
+import { confirmationViews, retroactiveForm, summaryView } from '../daily-ui';
+import { h, preserveDrafts } from '../ui';
 
-if (app) {
-  app.innerHTML = `
-    <h1>今日時間軸</h1>
-    <div class="card stack">
-      <p>今日時間軸會在「批次 2:一天的時間」加入。</p>
-      <p class="muted small">到時候這裡會依時間顯示今天的工作時段、固定行程、正在計時的工作,以及當日統計。</p>
-    </div>
-  `;
+const app = document.querySelector<HTMLElement>('#app')!;
+const timeline = h('div', { className: 'stack' });
+const form = h('div');
+const error = h('div', { role: 'alert' });
+app.replaceChildren(h('h1', {}, '今日時間軸'), error, timeline, form);
+async function send(command: Command): Promise<void> {
+  const result = await runCommand(command);
+  error.className = result.ok ? '' : 'error';
+  error.textContent = result.ok ? '' : result.error.message;
+  await render(result.ok);
 }
+async function render(updateForm = false): Promise<void> {
+  const state = await loadState();
+  const restore = updateForm ? () => {} : preserveDrafts(app);
+  const entries = getDayTimeline(state, new Date());
+  timeline.replaceChildren(summaryView(state), ...confirmationViews(state, send),
+    ...entries.map(e => {
+      const status = e.kind === 'session' ? e.outcome === null ? '計時中' : { completed: '完成', abandoned: '放棄', interrupted: '被中斷' }[e.outcome] : e.kind === 'commitment' ? '固定行程' : '上班時段';
+      return h('article', { className: `card stack timeline-entry ${e.kind} ${e.outcome ?? 'running'} ${e.adHoc ? 'adhoc' : ''}` },
+        h('span', { className: 'small muted' }, `${e.startedAt.slice(11, 16)}–${e.endedAt?.slice(11, 16) ?? '現在'}`),
+        h('strong', {}, e.title), h('span', { className: 'small' }, `${status}${e.adHoc ? ' · 臨時工作' : ''}${e.endTimeUnconfirmed ? ' · 結束時間待確認' : ''}`),
+        e.note ? h('p', { className: 'session-note' }, e.note) : null);
+    }));
+  form.replaceChildren(retroactiveForm(state, send));
+  restore();
+}
+void render();
+onStateChanged(() => void render());
+setInterval(() => void render(), 30_000);
