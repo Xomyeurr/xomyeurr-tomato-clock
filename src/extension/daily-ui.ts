@@ -15,6 +15,7 @@ export function planningView(state: AppState, send?: Send): HTMLElement {
   const warningLabels: Record<string, string> = {
     projected_completion_after_deadline: '預估完成日超過截止日',
     available_time_below_threshold: '截止日前可用時間低於門檻',
+    guarantee_not_met: '今天分不到每日保底時間',
   };
   return h('section', { className: 'card stack theme-planning', 'data-planning': '' }, sectionTitle('P', '專案排程'),
     ...projects.map(p => {

@@ -116,12 +116,25 @@ export function getMustStartBy(state: AppState, projectId: string, now: Date): D
   return found < today ? today : found;
 }
 
+/**
+ * 已過 Must-Start-By 的 Project 每天先拿保底時間;保底加起來超過今天剩下的可用時間時,
+ * 會有 Project 分不到。分不到的那些要讓使用者看見,不能被默默吞掉。
+ */
+function meetsTodayGuarantee(state: AppState, projectId: string, today: DateString, now: Date): boolean {
+  const must = getMustStartBy(state, projectId, now);
+  if (must === null || must > today) return true;
+  const allocated = getSuggestedTimeBlocks(state, now).filter(b => b.projectId === projectId).length * state.settings.pomodoro.focusMinutes;
+  const covered = getProjectWorkedOnDate(state, projectId, today, now) + getProjectLockedMinutesOnDate(state, projectId, today) + allocated;
+  return covered >= state.settings.mustStartBy.guaranteedMinutesPerDay;
+}
+
 export interface DeadlineRiskWarning { projectId: string; projectedCompletionDate: DateString | null; availableMinutes: number; remainingMinutes: number; conditions: string[] }
 export function getDeadlineRiskWarning(state: AppState, projectId: string, now: Date): DeadlineRiskWarning | null {
   const project = state.projects.find(p => p.id === projectId);
   const remaining = getProjectRemainingMinutes(state, projectId, now);
   if (!project || project.status !== 'active' || !project.endDate || remaining === null) return null;
-  let need = Math.max(0, remaining); let date = new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(now); let projected: string | null = need <= 0 ? date : null;
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(now);
+  let need = Math.max(0, remaining); let date = today; let projected: string | null = need <= 0 ? date : null;
   for (let i = 0; i <= 366 && projected === null; i++) { need -= dayMinutes(state, date, i === 0 ? now : undefined); if (need <= 0) projected = date; date = nextDate(date); }
   const available = getAvailableMinutesUntil(state, now, project.endDate);
   const threshold = { ...state.settings.deadlineRisk, ...(project.deadlineRiskOverride ?? {}) };
@@ -129,6 +142,7 @@ export function getDeadlineRiskWarning(state: AppState, projectId: string, now: 
   const conditions: string[] = [];
   if (projected && Date.parse(`${projected}T23:59:59Z`) > deadlineMs) conditions.push('projected_completion_after_deadline');
   if (available < remaining * threshold.availablePercent / 100) conditions.push('available_time_below_threshold');
+  if (!meetsTodayGuarantee(state, projectId, today, now)) conditions.push('guarantee_not_met');
   return { projectId, projectedCompletionDate: projected, availableMinutes: available, remainingMinutes: remaining, conditions };
 }
 

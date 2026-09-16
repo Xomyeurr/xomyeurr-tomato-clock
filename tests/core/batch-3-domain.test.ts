@@ -478,3 +478,23 @@ describe('批次 3 domain: deadline urgency when no effort remains', () => {
     });
   });
 });
+
+// Story 76:保底衝突時沒拿到保底的 Project 要出預警,不能被默默吞掉。
+test('a Project past Must-Start-By that loses the guarantee conflict is warned, not silently starved', () => {
+  const ctx = { now: at('2026-09-15T17:00:00+08:00'), newId: sequentialIds() };
+  let state = createInitialState(ctx);
+  for (const name of ['甲', '乙']) {
+    state = applyOk(state, { type: 'createProject', name, requesterId: 'req_self',
+      startDate: '2026-09-01', endDate: '2026-09-21', effortEstimateMinutes: 1500 }, ctx);
+  }
+  const [winner, loser] = state.projects.filter(p => p.kind === 'project').map(p => p.id);
+  state = applyOk(state, { type: 'createTask', projectId: winner!, title: '甲的工作' }, ctx);
+  state = applyOk(state, { type: 'createTask', projectId: loser!, title: '乙的工作' }, ctx);
+
+  // 17:00 後只剩一個番茄鐘的空檔,兩個 Project 都已過 Must-Start-By,保底只夠一份。
+  expect(getMustStartBy(state, loser!, ctx.now)).toBe('2026-09-15');
+  expect(getSuggestedTimeBlocks(state, ctx.now).map(b => b.projectId)).toEqual([winner]);
+
+  expect(getDeadlineRiskWarning(state, winner!, ctx.now)!.conditions).not.toContain('guarantee_not_met');
+  expect(getDeadlineRiskWarning(state, loser!, ctx.now)!.conditions).toContain('guarantee_not_met');
+});

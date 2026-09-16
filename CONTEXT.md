@@ -54,7 +54,7 @@ The single system-provided pseudo-Project that houses all Ad-hoc Tasks, so every
 _Avoid_: Miscellaneous, backlog
 
 **Deadline Risk Warning**:
-A self-facing alert (never sent to anyone else automatically) that a Project's deadline is at risk. Fires when either: the projected completion date exceeds the deadline by more than a configured buffer (default 0 days, overridable per Project), or remaining available time before the deadline falls below a configured percentage of the remaining Effort Estimate. Either condition alone is sufficient — it is not an AI judgment, just a rule-engine computation.
+A self-facing alert (never sent to anyone else automatically) that a Project's deadline is at risk. Fires on any of: the projected completion date exceeds the deadline by more than a configured buffer (default 0 days, overridable per Project); remaining available time before the deadline falls below a configured percentage of the remaining Effort Estimate; or the Project is past its Must-Start-By but today's worked, locked and suggested minutes together still fall short of the daily guarantee. Any one condition alone is sufficient — it is not an AI judgment, just a rule-engine computation.
 _Avoid_: Notification (implies sent to someone else)
 
 **Override**:
