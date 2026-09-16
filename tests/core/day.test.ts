@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { createInitialState, getDaySummary } from '../../src/core';
-import { at, sequentialIds } from './helpers';
+import { createInitialState, getDaySummary, getDayTimeline, getLockedTimeBlocks, getSuggestedTimeBlocks } from '../../src/core';
+import { applyOk, at, sequentialIds } from './helpers';
 
 test('today only includes future working ranges and weekends default to no work', () => {
   const state = createInitialState({ now: at('2026-09-15T10:00:00+08:00'), newId: sequentialIds() });
@@ -35,4 +35,26 @@ test('weekly hours and cycle adjustments validate ranges and only override today
   }
   state = applyOk(state, { type: 'resetDayWorkHours', date: '2026-09-15' }, ctx);
   expect(state.workHours.dayOverrides).toEqual({});
+});
+
+test('day scheduling surfaces consistently subtract Commitments from available work time', () => {
+  const ctx = { now: at('2026-09-15T08:00:00+08:00'), newId: sequentialIds() };
+  let state = createInitialState(ctx);
+  state = applyOk(state, { type: 'createProject', name: '交付功能', requesterId: 'req_self', startDate: '2026-09-15' }, ctx);
+  const projectId = state.projects[1]!.id;
+  state = applyOk(state, { type: 'createTask', projectId, title: '實作' }, ctx);
+  state = applyOk(state, { type: 'createCommitment', title: '早會', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '09:00', end: '10:00' } }, ctx);
+
+  expect(getDaySummary(state, ctx.now).remainingMinutes).toBe(420);
+  expect(getDayTimeline(state, ctx.now).filter(e => e.kind === 'workHours').map(e => [e.startedAt.slice(11, 16), e.endedAt?.slice(11, 16)])).toEqual([
+    ['10:00', '12:00'],
+    ['13:00', '18:00'],
+  ]);
+  expect(getSuggestedTimeBlocks(state, ctx.now).every(block => block.end <= '09:00' || block.start >= '10:00')).toBe(true);
+
+  state = applyOk(state, { type: 'lockTimeBlock', projectId, date: '2026-09-15', start: '10:00', end: '12:00' }, ctx);
+  state = applyOk(state, { type: 'createCommitment', title: '補會', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '10:00', end: '11:00' } }, ctx);
+  expect(getLockedTimeBlocks(state, '2026-09-15').map(block => [block.start, block.end])).toEqual([['11:00', '12:00']]);
 });

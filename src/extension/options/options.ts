@@ -455,7 +455,7 @@ async function render(): Promise<void> {
       exportSection(),
       workHoursSection(state, send),
       dayOverrideSection(state, send),
-      commitmentsSection(state, send),
+      commitmentsSection(state, send, render),
       requesterSection(state),
       projectSection(state),
       doneProjectSection(state),

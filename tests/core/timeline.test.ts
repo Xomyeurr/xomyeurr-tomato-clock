@@ -29,3 +29,30 @@ test('today timeline subtracts Commitments from work hours', () => {
     ['workHours', '上班時段', '13:00', '18:00'],
   ]);
 });
+
+test('today timeline handles Commitment subtraction boundary cases', () => {
+  const ctx = { now: at('2026-09-15T11:00:00+08:00'), newId: sequentialIds() };
+  let state = createInitialState(ctx);
+  state = applyOk(state, { type: 'createCommitment', title: '中段會議', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '10:00', end: '11:00' } }, ctx);
+  state = applyOk(state, { type: 'createCommitment', title: '午前收尾', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '11:30', end: '12:00' } }, ctx);
+  state = applyOk(state, { type: 'createCommitment', title: '下午整段', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '13:00', end: '18:00' } }, ctx);
+
+  expect(getDayTimeline(state, ctx.now).filter(e => e.kind === 'workHours').map(e => [e.startedAt.slice(11, 16), e.endedAt?.slice(11, 16)])).toEqual([
+    ['09:00', '10:00'],
+    ['11:00', '11:30'],
+  ]);
+});
+
+test('today timeline trims work hours when a Commitment spans multiple ranges', () => {
+  const ctx = { now: at('2026-09-15T11:00:00+08:00'), newId: sequentialIds() };
+  const state = applyOk(createInitialState(ctx), { type: 'createCommitment', title: '跨段行程', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '11:00', end: '14:00' } }, ctx);
+
+  expect(getDayTimeline(state, ctx.now).filter(e => e.kind === 'workHours').map(e => [e.startedAt.slice(11, 16), e.endedAt?.slice(11, 16)])).toEqual([
+    ['09:00', '11:00'],
+    ['14:00', '18:00'],
+  ]);
+});

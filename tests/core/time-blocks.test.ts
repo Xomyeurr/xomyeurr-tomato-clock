@@ -46,3 +46,35 @@ test('locked project without open Tasks explains fallback to general recommendat
   state = applyOk(state, { type: 'lockTimeBlock', projectId: emptyProject, date: '2026-09-15', start: '09:00', end: '09:50' }, ctx);
   expect(getNextTask(state, at('2026-09-15T09:10:00+08:00'))).toMatchObject({ projectId: first, reason: 'lockedTimeBlockNoTask' });
 });
+
+test('creating a Commitment trims conflicting locked Time Blocks', () => {
+  const { state: initial, ctx, first } = setup();
+  let state = applyOk(initial, { type: 'lockTimeBlock', projectId: first, date: '2026-09-15', start: '09:00', end: '12:00' }, ctx);
+  state = applyOk(state, { type: 'createCommitment', title: '早會', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '09:00', end: '10:00' } }, ctx);
+
+  expect(getLockedTimeBlocks(state, '2026-09-15').map(b => [b.start, b.end])).toEqual([['10:00', '12:00']]);
+});
+
+test('updating a Commitment splits or removes conflicting locked Time Blocks', () => {
+  const { state: initial, ctx, first } = setup();
+  let state = applyOk(initial, { type: 'createCommitment', title: '晚點的會', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '16:00', end: '17:00' } }, ctx);
+  const commitmentId = state.commitments[0]!.id;
+  state = applyOk(state, { type: 'lockTimeBlock', projectId: first, date: '2026-09-15', start: '09:00', end: '12:00' }, ctx);
+  state = applyOk(state, { type: 'lockTimeBlock', projectId: first, date: '2026-09-15', start: '13:00', end: '14:00' }, ctx);
+
+  state = applyOk(state, { type: 'updateCommitment', commitmentId, title: '跨段會議', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '10:00', end: '14:00' } }, ctx);
+
+  expect(getLockedTimeBlocks(state, '2026-09-15').map(b => [b.start, b.end])).toEqual([['09:00', '10:00']]);
+});
+
+test('creating a middle Commitment splits a locked Time Block into remaining parts', () => {
+  const { state: initial, ctx, first } = setup();
+  let state = applyOk(initial, { type: 'lockTimeBlock', projectId: first, date: '2026-09-15', start: '09:00', end: '12:00' }, ctx);
+  state = applyOk(state, { type: 'createCommitment', title: '中段會議', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '10:00', end: '11:00' } }, ctx);
+
+  expect(getLockedTimeBlocks(state, '2026-09-15').map(b => [b.start, b.end])).toEqual([['09:00', '10:00'], ['11:00', '12:00']]);
+});

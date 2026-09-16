@@ -1,6 +1,6 @@
 import { fail, succeed, type CommandResult } from './result';
 import { formatTimestamp } from './time';
-import type { AppState, Commitment, CommitmentSchedule, Context, Weekday } from './types';
+import type { AppState, Commitment, CommitmentSchedule, Context, TimeBlock, TimeRange, Weekday } from './types';
 import { isValidDate } from './validation';
 import { validRanges } from './work-hours';
 const WEEKDAYS: Weekday[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -21,6 +21,37 @@ export function getCommitmentsForDate(state: AppState, date: string): Commitment
     return s.type === 'once' ? s.date === date : s.fromDate <= date &&
       (s.untilDate === null || s.untilDate >= date) && s.weekdays.includes(weekday);
   });
+}
+
+const minute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+function subtractRanges(range: TimeRange, blockers: TimeRange[]): TimeRange[] {
+  let cursor = minute(range.start);
+  const end = minute(range.end);
+  const parts: TimeRange[] = [];
+  for (const blocker of [...blockers].sort((a, b) => a.start.localeCompare(b.start))) {
+    const blockerStart = minute(blocker.start);
+    const blockerEnd = minute(blocker.end);
+    if (blockerEnd <= cursor || blockerStart >= end) continue;
+    if (blockerStart > cursor) parts.push({ start: clock(cursor), end: clock(Math.min(blockerStart, end)) });
+    cursor = Math.max(cursor, blockerEnd);
+  }
+  if (cursor < end) parts.push({ start: clock(cursor), end: clock(end) });
+  return parts;
+}
+
+function reconcileLockedTimeBlocks(state: AppState, ctx: Context, updatedAt: string): AppState {
+  const timeBlocks: TimeBlock[] = [];
+  for (const block of state.timeBlocks) {
+    const blockers = getCommitmentsForDate(state, block.date).map(c => ({ start: c.schedule.start, end: c.schedule.end }));
+    const parts = subtractRanges(block, blockers);
+    parts.forEach((part, index) => {
+      timeBlocks.push({ ...block, id: index === 0 ? block.id : ctx.newId('blk'), start: part.start, end: part.end,
+        createdAt: index === 0 ? block.createdAt : updatedAt, updatedAt: part.start === block.start && part.end === block.end ? block.updatedAt : updatedAt });
+    });
+  }
+  return { ...state, timeBlocks };
 }
 
 export function applyCommitmentCommand(state: AppState, command: CommitmentCommand, ctx: Context): CommandResult {
@@ -44,7 +75,9 @@ export function applyCommitmentCommand(state: AppState, command: CommitmentComma
   if (!command.title.trim() || !valid) return fail('invalid_commitment', '請輸入行程名稱、有效日期、星期與起訖時間');
   if (command.projectId !== null && !state.projects.some(p => p.id === command.projectId && p.kind === 'project')) return fail('project_not_found', '找不到連結的專案');
   const fields = { title: command.title.trim(), projectId: command.projectId, schedule: s.type === 'weekly' ? { ...s, weekdays: [...s.weekdays] } : { ...s }, updatedAt: ts };
-  return succeed({ ...state, commitments: command.type === 'createCommitment' ?
+  const commitments: Commitment[] = command.type === 'createCommitment' ?
     [...state.commitments, { ...fields, id: ctx.newId('cmt'), skippedDates: [], status: 'active', createdAt: ts }] :
-    state.commitments.map(c => c.id === command.commitmentId ? { ...c, ...fields } : c) });
+    state.commitments.map(c => c.id === command.commitmentId ? { ...c, ...fields } : c);
+  const next = { ...state, commitments };
+  return succeed(reconcileLockedTimeBlocks(next, ctx, ts));
 }

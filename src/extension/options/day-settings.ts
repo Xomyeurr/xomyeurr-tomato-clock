@@ -1,9 +1,11 @@
 import { type AppState, type Command, type Commitment, type CommitmentSchedule, getWorkRanges, type TimeRange, type Weekday } from '../../core';
 import { field, h, todayIn } from '../ui';
 
-type Send = (command: Command) => Promise<unknown>;
+type Send = (command: Command) => Promise<boolean>;
+type Refresh = () => Promise<void>;
 const weekdays: [Weekday, string][] = [['mon', '週一'], ['tue', '週二'], ['wed', '週三'], ['thu', '週四'], ['fri', '週五'], ['sat', '週六'], ['sun', '週日']];
 const editingWeekdays = new Set<Weekday>();
+const editingCommitments = new Set<string>();
 function rangesEditor(ranges: TimeRange[], compact = false) {
   const rows = h('div', { className: compact ? 'range-list' : 'stack' });
   const controls: { start: HTMLInputElement; end: HTMLInputElement; row: HTMLElement }[] = [];
@@ -74,7 +76,7 @@ export function dayOverrideSection(state: AppState, send: Send): HTMLElement {
     h('div', { className: 'row' }, h('span', { className: 'small muted' }, '已調整：'), overrideDates.length ? null : h('span', { className: 'small muted' }, '無'),
       ...overrideDates.map(value => h('button', { type: 'button', className: 'small', onclick: () => loadDate(value) }, value))));
 }
-function commitmentForm(state: AppState, send: Send, commitment?: Commitment): HTMLElement {
+function commitmentForm(state: AppState, send: Send, commitment?: Commitment, afterSubmit?: () => void, refresh?: Refresh): HTMLElement {
   const schedule = commitment?.schedule;
   const title = h('input', { type: 'text', value: commitment?.title ?? '', required: true });
   const type = h('select', {}, h('option', { value: 'once' }, '單次'), h('option', { value: 'weekly' }, '每週重複'));
@@ -89,24 +91,68 @@ function commitmentForm(state: AppState, send: Send, commitment?: Commitment): H
   const weeklyFields = h('div', {}, field('重複結束日（可留白）', until), h('div', { className: 'row' }, ...choices.map(c => h('label', { className: 'row' }, c.input, c.label))));
   const updateType = () => { weeklyFields.hidden = type.value !== 'weekly'; };
   type.addEventListener('change', updateType); updateType();
-  return h('form', { className: 'stack', onsubmit: (event: Event) => {
+  return h('form', { className: 'stack', onsubmit: async (event: Event) => {
     event.preventDefault();
+    const selectedWeekdays = choices.filter(c => c.input.checked).map(c => c.day);
+    if (type.value === 'weekly' && selectedWeekdays.length === 0) {
+      window.alert('每週重複至少要選一天');
+      return;
+    }
+    if (type.value === 'weekly' && until.value && until.value < date.value) {
+      window.alert('重複結束日不能早於開始日');
+      return;
+    }
     const schedule: CommitmentSchedule = type.value === 'once' ? { type: 'once', date: date.value, start: start.value, end: end.value } :
-      { type: 'weekly', fromDate: date.value, untilDate: until.value || null, weekdays: choices.filter(c => c.input.checked).map(c => c.day), start: start.value, end: end.value };
+      { type: 'weekly', fromDate: date.value, untilDate: until.value || null, weekdays: selectedWeekdays, start: start.value, end: end.value };
     const fields = { title: title.value, projectId: project.value || null, schedule };
-    void send(commitment ? { type: 'updateCommitment', commitmentId: commitment.id, ...fields } : { type: 'createCommitment', ...fields });
+    if (await send(commitment ? { type: 'updateCommitment', commitmentId: commitment.id, ...fields } : { type: 'createCommitment', ...fields })) {
+      afterSubmit?.();
+      await refresh?.();
+    }
   } }, field('行程名稱', title), h('div', { className: 'grid' }, field('重複方式', type), field('日期 / 重複開始日', date), field('開始時間', start), field('結束時間', end), field('連結專案', project)),
   weeklyFields, h('button', { type: 'submit' }, commitment ? '儲存行程' : '新增行程'));
 }
-export function commitmentsSection(state: AppState, send: Send): HTMLElement {
-  return h('section', { className: 'card stack' }, h('h2', {}, '固定行程'), commitmentForm(state, send),
-    ...state.commitments.filter(c => c.status === 'active').map(c => {
-      const date = h('input', { type: 'date', value: todayIn(state.settings.timezone), required: true });
-      return h('details', {}, h('summary', {}, `${c.title} · ${c.schedule.start}–${c.schedule.end}`), commitmentForm(state, send, c),
-        h('form', { className: 'row', onsubmit: (event: Event) => { event.preventDefault(); void send({ type: 'skipCommitment', commitmentId: c.id, date: date.value }); } }, field('取消其中一次的日期', date), h('button', { type: 'submit' }, '取消這一次')),
-        h('p', { className: 'small muted' }, `已取消日期：${c.skippedDates.join('、') || '無'}`),
-        h('div', { className: 'row' },
-          h('button', { type: 'button', onclick: () => void send({ type: 'archiveCommitment', commitmentId: c.id }) }, '封存行程'),
-          h('button', { type: 'button', className: 'ghost', onclick: () => void send({ type: 'deleteCommitment', commitmentId: c.id }) }, '刪除行程')));
-    }));
+function commitmentScheduleSummary(commitment: Commitment): string {
+  const schedule = commitment.schedule;
+  if (schedule.type === 'once') return `${schedule.date} · ${schedule.start}-${schedule.end}`;
+  const labels = schedule.weekdays.map(day => weekdays.find(([value]) => value === day)?.[1] ?? day).join('、');
+  return `每週 ${labels} · ${schedule.start}-${schedule.end} · 自 ${schedule.fromDate}${schedule.untilDate ? ` · 到 ${schedule.untilDate}` : ''}`;
+}
+
+export function commitmentsSection(state: AppState, send: Send, refresh?: Refresh): HTMLElement {
+  const active = state.commitments.filter(c => c.status === 'active');
+  return h('section', { className: 'card stack' }, h('h2', {}, '固定行程'),
+    commitmentForm(state, send),
+    h('h3', {}, `管理固定行程(${active.length})`),
+    active.length ? h('ul', { className: 'list' }, ...active.map(commitment => {
+      if (editingCommitments.has(commitment.id)) {
+        return h('li', { className: 'stack' }, commitmentForm(state, send, commitment, () => editingCommitments.delete(commitment.id), refresh),
+          h('button', { type: 'button', className: 'small ghost', onclick: (event: Event) => {
+            editingCommitments.delete(commitment.id);
+            (event.currentTarget as HTMLElement).closest('section')?.replaceWith(commitmentsSection(state, send));
+          } }, '取消編輯'));
+      }
+      const skipDate = h('input', { type: 'date', value: todayIn(state.settings.timezone), required: true, hidden: true, 'aria-label': '取消其中一次的日期' });
+      const action = h('select', { 'aria-label': '固定行程操作' },
+        h('option', { value: '' }, '操作'),
+        h('option', { value: 'skip' }, '取消一次'),
+        h('option', { value: 'archive' }, '封存'),
+        h('option', { value: 'delete' }, '刪除'));
+      action.addEventListener('change', () => { skipDate.hidden = action.value !== 'skip'; });
+      const projectName = commitment.projectId ? state.projects.find(project => project.id === commitment.projectId)?.name ?? commitment.projectId : '不連結專案';
+      return h('li', { className: 'commitment-row' },
+        h('div', { className: 'grow commitment-main' },
+          h('strong', {}, commitment.title),
+          h('span', { className: 'muted small' }, `${commitmentScheduleSummary(commitment)} · ${projectName}${commitment.skippedDates.length ? ` · 已取消 ${commitment.skippedDates.length} 次` : ''}`)),
+        h('button', { type: 'button', className: 'small', onclick: (event: Event) => {
+          editingCommitments.add(commitment.id);
+          (event.currentTarget as HTMLElement).closest('section')?.replaceWith(commitmentsSection(state, send));
+        } }, '編輯'),
+        h('div', { className: 'task-actions' }, skipDate, action,
+          h('button', { type: 'button', className: 'small', onclick: () => {
+            if (action.value === 'skip') void send({ type: 'skipCommitment', commitmentId: commitment.id, date: skipDate.value });
+            else if (action.value === 'archive') void send({ type: 'archiveCommitment', commitmentId: commitment.id });
+            else if (action.value === 'delete' && window.confirm(`刪除固定行程「${commitment.title}」？`)) void send({ type: 'deleteCommitment', commitmentId: commitment.id });
+          } }, '執行')));
+    })) : h('p', { className: 'muted small' }, '尚未建立固定行程。'));
 }
