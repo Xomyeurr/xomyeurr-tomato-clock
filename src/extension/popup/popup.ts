@@ -1,14 +1,14 @@
 import { type AppState, type Command, getNextTask, getStartableTasks, getTimerStatus } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
 import { field, h, preserveDrafts } from '../ui';
-import { summaryView, retroactiveForm, confirmationViews } from '../daily-ui';
+import { summaryView, retroactiveForm, confirmationViews, planningView } from '../daily-ui';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let errorMessage: string | null = null;
 let showOtherTasks = false;
 let windowId: number | undefined;
 
-const REASON_LABELS: Record<string, string> = { highestWeight: '排程權重最高' };
+const REASON_LABELS: Record<string, string> = { highestWeight: '排程權重最高', mustStartBy: '每日保底', lockedTimeBlock: '鎖定時段', noAvailableTime: '今天沒有剩餘可用時段' };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const mmss = (seconds: number) => `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
@@ -167,6 +167,7 @@ async function render(preserve = true): Promise<void> {
     h('header', {}, h('strong', {}, '番茄鐘小助理')),
     errorMessage ? h('div', { className: 'error', role: 'alert' }, errorMessage) : null,
     summaryView(state, send), ...confirmationViews(state, send), running ? runningView(state) : idleView(state),
+    planningView(state, send),
     running ? null : freeTimerForm(state), adHocForm(), retroactiveForm(state, send), footer()));
   restore();
 }

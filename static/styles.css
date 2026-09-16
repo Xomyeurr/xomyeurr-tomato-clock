@@ -82,3 +82,6 @@ input[type="time"], input[type="datetime-local"], input[type="number"] {
 .session-note { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 details > summary { cursor: pointer; }
 details[open] > summary { margin-bottom: 12px; }
+.planning-row { display: grid; gap: 4px; padding: 8px 0; border-top: 1px solid var(--line); }
+.warning { color: var(--warn); background: var(--warn-soft); padding: 2px 6px; border-radius: 5px; }
+.suggested-list, .locked-row { border-top: 1px solid var(--line); padding-top: 8px; }

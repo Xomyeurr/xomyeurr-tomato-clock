@@ -76,9 +76,9 @@ export interface WorkSession {
 export interface Override {
   id: string;
   at: Timestamp;
-  type: 'differentTask';
-  suggested: { taskId: string } | null;
-  actual: { taskId: string };
+  type: 'differentTask' | 'lockedTimeBlock';
+  suggested: { taskId: string } | { projectId: string; date: string; start: string; end: string } | null;
+  actual: { taskId: string } | { projectId: string; date: string; start: string; end: string };
 }
 
 export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
@@ -103,8 +103,19 @@ export interface Commitment {
   updatedAt: Timestamp;
 }
 
+export interface TimeBlock {
+  id: string;
+  projectId: string;
+  date: DateString;
+  start: string;
+  end: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export interface AppState {
   commitments: Commitment[];
+  timeBlocks: TimeBlock[];
   workHours: WorkHours;
   settings: Settings;
   requesters: Requester[];

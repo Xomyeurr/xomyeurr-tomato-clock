@@ -1,6 +1,6 @@
 import { type Command, getDayTimeline } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
-import { confirmationViews, retroactiveForm, summaryView } from '../daily-ui';
+import { confirmationViews, retroactiveForm, summaryView, planningView } from '../daily-ui';
 import { h, preserveDrafts } from '../ui';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -18,7 +18,7 @@ async function render(updateForm = false): Promise<void> {
   const state = await loadState();
   const restore = updateForm ? () => {} : preserveDrafts(app);
   const entries = getDayTimeline(state, new Date());
-  timeline.replaceChildren(summaryView(state), ...confirmationViews(state, send),
+  timeline.replaceChildren(summaryView(state), planningView(state, send), ...confirmationViews(state, send),
     ...entries.map(e => {
       const status = e.kind === 'session' ? e.outcome === null ? '計時中' : { completed: '完成', abandoned: '放棄', interrupted: '被中斷' }[e.outcome] : e.kind === 'commitment' ? '固定行程' : '上班時段';
       return h('article', { className: `card stack timeline-entry ${e.kind} ${e.outcome ?? 'running'} ${e.adHoc ? 'adhoc' : ''}` },

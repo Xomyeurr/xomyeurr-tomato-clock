@@ -1,3 +1,5 @@
+import { getMustStartBy, getScheduleWeight, getSuggestedTimeBlocks } from './planning';
+import { getLockedTimeBlocks } from './time-blocks';
 import type { AppState, Project, Task } from './types';
 
 export interface Recommendation {
@@ -5,23 +7,8 @@ export interface Recommendation {
   taskTitle: string;
   projectId: string;
   projectName: string;
-  reason: 'highestWeight';
+  reason: 'highestWeight' | 'mustStartBy' | 'lockedTimeBlock' | 'noAvailableTime';
   score: number;
-}
-
-const toUnit = (weight: number) => (weight - 1) / 4;
-
-function scheduleWeight(state: AppState, project: Project): number {
-  const requester = state.requesters.find((r) => r.id === project.requesterId);
-  const requesterWeight = project.requesterWeightOverride ?? requester?.defaultWeight ?? 3;
-  const factors = state.settings.scheduleWeightFactors;
-  // Urgency needs Effort Estimate and work hours, which aren't modelled yet; 0 keeps this factor neutral.
-  const deadlineUrgency = 0;
-  return (
-    factors.deadlineUrgency * deadlineUrgency +
-    factors.requester * toUnit(requesterWeight) +
-    factors.manualPriority * toUnit(project.manualPriority ?? 3)
-  );
 }
 
 export function getStartableTasks(state: AppState): Task[] {
@@ -45,13 +32,32 @@ function pickTask(state: AppState, candidates: Task[]): Task | undefined {
 
 export function getNextTask(state: AppState, now: Date): Recommendation | null {
   const startable = getStartableTasks(state);
-  let best: { project: Project; score: number } | undefined;
+  const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(now);
+  const current = now.toLocaleTimeString('en-GB', { timeZone: state.settings.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const locked = getLockedTimeBlocks(state, localDate).find(b => b.start <= current && current < b.end);
+  if (locked) {
+    const lockedTasks = startable.filter(t => t.projectId === locked.projectId);
+    const task = pickTask(state, lockedTasks);
+    if (task) return { taskId: task.id, taskTitle: task.title, projectId: locked.projectId, projectName: state.projects.find(p => p.id === locked.projectId)?.name ?? '', reason: 'lockedTimeBlock', score: getScheduleWeight(state, state.projects.find(p => p.id === locked.projectId)!, now).total };
+  }
+  const suggested = getSuggestedTimeBlocks(state, now)[0];
+  if (suggested) {
+    const suggestedTasks = startable.filter(t => t.projectId === suggested.projectId);
+    const task = pickTask(state, suggestedTasks);
+    const project = state.projects.find(p => p.id === suggested.projectId);
+    if (task && project) {
+      return { taskId: task.id, taskTitle: task.title, projectId: project.id, projectName: project.name,
+        reason: 'highestWeight', score: getScheduleWeight(state, project, now).total };
+    }
+  }
+  let best: { project: Project; score: number; must: boolean } | undefined;
   for (const project of state.projects) {
     if (!startable.some((t) => t.projectId === project.id)) continue;
-    const score = scheduleWeight(state, project);
+    const score = getScheduleWeight(state, project, now).total;
+    const must = !!getMustStartBy(state, project.id, now) && getMustStartBy(state, project.id, now)! <= localDate;
     const createdEarlier =
       best !== undefined && new Date(project.createdAt).getTime() < new Date(best.project.createdAt).getTime();
-    if (!best || score > best.score || (score === best.score && createdEarlier)) best = { project, score };
+    if (!best || Number(must) > Number(best.must) || (must === best.must && (score > best.score || (score === best.score && createdEarlier)))) best = { project, score, must };
   }
   if (!best) return null;
   const chosen = best;
@@ -62,7 +68,7 @@ export function getNextTask(state: AppState, now: Date): Recommendation | null {
     taskTitle: task.title,
     projectId: chosen.project.id,
     projectName: chosen.project.name,
-    reason: 'highestWeight',
+    reason: suggested ? (chosen.must ? 'mustStartBy' : 'highestWeight') : 'noAvailableTime',
     score: chosen.score,
   };
 }

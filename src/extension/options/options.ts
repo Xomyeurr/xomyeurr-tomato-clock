@@ -1,5 +1,5 @@
 import { workHoursSection, commitmentsSection } from './day-settings';
-import { type AppState, type Command, type Project, type Requester, SELF_REQUESTER_ID, type Task } from '../../core';
+import { getProjectRemainingMinutes, type AppState, type Command, type Project, type Requester, SELF_REQUESTER_ID, type Task } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
 import { field, h, todayIn, weightSelect } from '../ui';
 
@@ -182,6 +182,19 @@ function openTaskRow(task: Task): HTMLLIElement {
   );
 }
 
+function planningControls(state: AppState, project: Project): HTMLElement {
+  const value = h('input', { type: 'number', min: 1, value: project.effortEstimateMinutes ?? '' });
+  const unit = h('select', {}, h('option', { value: 'minutes' }, '分鐘'), h('option', { value: 'hours' }, '小時'), h('option', { value: 'days' }, '工作日'));
+  const lateDays = h('input', { type: 'number', min: 0, value: project.deadlineRiskOverride?.lateDays ?? '' });
+  const available = h('input', { type: 'number', min: 0, value: project.deadlineRiskOverride?.availablePercent ?? '' });
+  return h('details', { className: 'planning-controls' }, h('summary', {}, '預估工作量與逾期預警'),
+    h('form', { className: 'stack', onsubmit: (event: Event) => { event.preventDefault(); void send({ type: 'setEffortEstimate', projectId: project.id, value: Number(value.value), unit: unit.value as 'minutes' | 'hours' | 'days' }); } },
+      h('div', { className: 'row' }, field('工作量', value), field('單位', unit), h('button', { type: 'submit' }, '儲存預估'))),
+    h('form', { className: 'stack', onsubmit: (event: Event) => { event.preventDefault(); void send({ type: 'setDeadlineRiskThreshold', projectId: project.id, lateDays: lateDays.value ? Number(lateDays.value) : undefined, availablePercent: available.value ? Number(available.value) : undefined }); } },
+      h('div', { className: 'row' }, field('延遲天數', lateDays), field('可用時間門檻 %', available), h('button', { type: 'submit' }, '儲存預警門檻'))),
+    h('p', { className: 'small muted' }, `剩餘工作量：${getProjectRemainingMinutes(state, project.id, new Date()) ?? '尚未設定'} 分鐘`));
+}
+
 function doneTaskList(tasks: Task[]): HTMLElement | null {
   if (!tasks.length) return null;
   return h(
@@ -229,6 +242,7 @@ function projectCard(state: AppState, project: Project): HTMLElement {
     { className: 'card stack' },
     header,
     h('span', { className: 'muted small' }, `進行中的 Task(${openTasks.length})`),
+    planningControls(state, project),
     openTasks.length ? h('ul', { className: 'list' }, ...openTasks.map(openTaskRow)) : h('p', { className: 'muted small' }, '沒有進行中的 Task。'),
     h(
       'form',

@@ -17,6 +17,7 @@ export type {
   Task,
   Timestamp,
   WorkSession,
+  TimeBlock,
 } from './types';
 
 export { getDaySummary, getWorkRanges } from './day';
@@ -27,3 +28,14 @@ export type { Commitment, CommitmentSchedule } from './types';
 export { getDayTimeline } from './timeline';
 export type { TimelineEntry } from './timeline';
 export { formatTimestamp, localDateTime } from './time';
+export {
+  averageWorkdayMinutes,
+  getDeadlineRiskWarning,
+  getMustStartBy,
+  getProjectRemainingMinutes,
+  getProjectWorkedMinutes,
+  getScheduleWeight,
+  getSuggestedTimeBlocks,
+} from './planning';
+export type { DeadlineRiskWarning, ScheduleWeight } from './planning';
+export { getLockedTimeBlocks } from './time-blocks';

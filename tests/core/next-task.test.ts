@@ -142,4 +142,10 @@ describe('基本功能:現在該做什麼(分數相同)', () => {
 
     expect(getNextTask(state, noon)).toMatchObject({ projectId: 'prj_2', projectName: '先建立', taskId: 'tsk_4' });
   });
+
+  it('今天沒有完整可用時段時仍推薦 Task 並說明原因', () => {
+    const { state } = plan();
+    const closed = { ...state, workHours: { ...state.workHours, dayOverrides: { '2026-09-15': [] } } };
+    expect(getNextTask(closed, noon)).toMatchObject({ reason: 'noAvailableTime' });
+  });
 });

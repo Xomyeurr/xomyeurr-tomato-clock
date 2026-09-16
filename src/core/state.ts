@@ -50,6 +50,7 @@ export function createInitialState(ctx: Context): AppState {
       dayOverrides: {}, updatedAt: ts,
     },
     commitments: [],
+    timeBlocks: [],
     tasks: [],
     sessions: [],
     overrides: [],

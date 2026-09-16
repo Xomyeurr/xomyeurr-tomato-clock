@@ -6,6 +6,8 @@ import { applySessionCommand, reconcileTimers, type SessionCommand } from './ses
 import { formatTimestamp } from './time';
 import type { AppState, Context, DateString, Project, Task } from './types';
 import { isValidDate, isWeight } from './validation';
+import { applyTimeBlockCommand, type TimeBlockCommand } from './time-blocks';
+import { averageWorkdayMinutes } from './planning';
 
 export type { CommandError, CommandResult } from './result';
 
@@ -18,6 +20,8 @@ type ProjectCommand =
       requesterId: string;
       requesterWeightOverride?: number | null;
       manualPriority?: number;
+      effortEstimateMinutes?: number | null;
+      deadlineRiskOverride?: Project['deadlineRiskOverride'];
     }
   | {
       type: 'updateProject';
@@ -28,15 +32,21 @@ type ProjectCommand =
       requesterId?: string;
       requesterWeightOverride?: number | null;
       manualPriority?: number;
+      effortEstimateMinutes?: number | null;
+      deadlineRiskOverride?: Project['deadlineRiskOverride'];
     }
   | { type: 'completeProject'; projectId: string };
+
+type PlanningCommand =
+  | { type: 'setEffortEstimate'; projectId: string; value: number; unit: 'minutes' | 'hours' | 'days' }
+  | { type: 'setDeadlineRiskThreshold'; projectId: string; lateDays?: number; availablePercent?: number };
 
 type TaskCommand =
   | { type: 'createTask'; projectId: string; title: string }
   | { type: 'updateTask'; taskId: string; title: string }
   | { type: 'completeTask'; taskId: string };
 
-export type Command = ProjectCommand | TaskCommand | RequesterCommand | SessionCommand | WorkHoursCommand | CommitmentCommand;
+export type Command = ProjectCommand | TaskCommand | PlanningCommand | TimeBlockCommand | RequesterCommand | SessionCommand | WorkHoursCommand | CommitmentCommand;
 
 type ProjectFields = Pick<
   Project,
@@ -96,6 +106,7 @@ export function apply(state: AppState, command: Command, ctx: Context): CommandR
       };
       const invalid = validateProjectFields(state, fields);
       if (invalid) return invalid;
+      if (command.effortEstimateMinutes !== undefined && command.effortEstimateMinutes !== null && (!Number.isFinite(command.effortEstimateMinutes) || command.effortEstimateMinutes <= 0)) return fail('invalid_effort_estimate', '預估工作量必須大於 0');
       return succeed({
         ...state,
         projects: [
@@ -104,8 +115,8 @@ export function apply(state: AppState, command: Command, ctx: Context): CommandR
             id: ctx.newId('prj'),
             kind: 'project',
             ...fields,
-            effortEstimateMinutes: null,
-            deadlineRiskOverride: null,
+            effortEstimateMinutes: command.effortEstimateMinutes ?? null,
+            deadlineRiskOverride: command.deadlineRiskOverride ?? null,
             status: 'active',
             doneAt: null,
             createdAt: ts,
@@ -129,9 +140,15 @@ export function apply(state: AppState, command: Command, ctx: Context): CommandR
       };
       const invalid = validateProjectFields(state, fields);
       if (invalid) return invalid;
+      if (command.effortEstimateMinutes !== undefined && command.effortEstimateMinutes !== null && (!Number.isFinite(command.effortEstimateMinutes) || command.effortEstimateMinutes <= 0)) return fail('invalid_effort_estimate', '預估工作量必須大於 0');
       return succeed({
         ...state,
-        projects: state.projects.map((p) => (p.id === project.id ? { ...p, ...fields, updatedAt: ts } : p)),
+        projects: state.projects.map((p) => (p.id === project.id ? {
+          ...p, ...fields,
+          ...(command.effortEstimateMinutes !== undefined ? { effortEstimateMinutes: command.effortEstimateMinutes } : {}),
+          ...(command.deadlineRiskOverride !== undefined ? { deadlineRiskOverride: command.deadlineRiskOverride } : {}),
+          updatedAt: ts,
+        } : p)),
       });
     }
 
@@ -145,6 +162,22 @@ export function apply(state: AppState, command: Command, ctx: Context): CommandR
           p.id === project.id ? { ...p, status: 'done', doneAt: ts, updatedAt: ts } : p,
         ),
       });
+    }
+
+    case 'setEffortEstimate': {
+      const project = findUserProject(state, command.projectId);
+      if (!project || !Number.isFinite(command.value) || command.value <= 0) return fail('invalid_effort_estimate', '預估工作量必須大於 0');
+      const multiplier = command.unit === 'minutes' ? 1 : command.unit === 'hours' ? 60 : averageWorkdayMinutes(state);
+      if (!multiplier) return fail('invalid_effort_estimate', '目前沒有可用的工作日，無法換算天數');
+      return succeed({ ...state, projects: state.projects.map(p => p.id === project.id ? { ...p, effortEstimateMinutes: command.value * multiplier, updatedAt: ts } : p) });
+    }
+
+    case 'setDeadlineRiskThreshold': {
+      const project = findUserProject(state, command.projectId);
+      const lateDays = command.lateDays ?? project?.deadlineRiskOverride?.lateDays ?? state.settings.deadlineRisk.lateDays;
+      const availablePercent = command.availablePercent ?? project?.deadlineRiskOverride?.availablePercent ?? state.settings.deadlineRisk.availablePercent;
+      if (!project || !Number.isInteger(lateDays) || lateDays < 0 || !Number.isFinite(availablePercent) || availablePercent < 0) return fail('invalid_deadline_risk', '預警門檻不正確');
+      return succeed({ ...state, projects: state.projects.map(p => p.id === project.id ? { ...p, deadlineRiskOverride: { lateDays, availablePercent }, updatedAt: ts } : p) });
     }
 
     case 'createTask': {
@@ -196,6 +229,11 @@ export function apply(state: AppState, command: Command, ctx: Context): CommandR
     case 'resetDayWorkHours':
     case 'shiftWorkdayEnd':
       return applyWorkHoursCommand(state, command, ctx);
+
+    case 'lockTimeBlock':
+    case 'moveTimeBlock':
+    case 'unlockTimeBlock':
+      return applyTimeBlockCommand(state, command, ctx);
 
     case 'createRequester':
     case 'updateRequester':

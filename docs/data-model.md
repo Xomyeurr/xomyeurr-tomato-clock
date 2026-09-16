@@ -2,15 +2,17 @@
 
 > 狀態:**已確認。** 實作時如果需要調整,就更新這份文件並提高 `schemaVersion`。術語的定義見 [CONTEXT.md](../CONTEXT.md)。
 
-## 批次 2：schemaVersion 2
+## 批次 3：schemaVersion 3
 
 - 新增持久化的 `work-hours` 與 `commitments` 鍵；AppState 的 `workHours` 對應儲存鍵 `work-hours`。
-- v1 資料首次載入時保留既有設定、Requester、Project、Task、Work Session 和 Override，補入預設週工時與空行程。遷移與所有指令讀寫共用擴充套件來源的 Web Lock，避免不同頁面覆寫彼此的更新。
+- 舊版資料首次載入時保留既有設定、Requester、Project、Task、Work Session 和 Override，補入預設週工時、空行程、空鎖定時段，以及 Project 的新欄位預設值。遷移與所有指令讀寫共用擴充套件來源的 Web Lock，避免不同頁面覆寫彼此的更新。
 - Work Session 新增 `durationMinutes`：Free Timer 使用者指定的到期提示長度；`null` 或舊紀錄缺少此欄位代表未設定長度。到期只提示，實際結束由手動結束或自動停止決定。
 - Free Timer 上限與下班時間仍即時計算，不另存計算結果。Chrome 鬧鐘、啟動及讀取資料時都會補做自動停止；即使關閉瀏覽器，也只記到應停止的時間。
 - 無上班時段的日子使用 150 分鐘上限；開始時已超過當天最後下班時間則立即停止、等待確認。需要繼續工作時可先延後當天下班時間。
 - 今日統計按設定時區的午夜切分，跨日工作分配到各天；工作優先於重疊的行程，重疊行程本身只計一次。「行程已用」僅計現在以前；「剩餘可用時間」僅計現在以後的上班時段，扣除未來行程，不會再扣一次已過去的工作。
 - 本地時間遇到夏令時間跳過的不存在時刻會拒絕；重複時刻由時區轉換規則選取一個對應時間，儲存時保留 UTC offset。
+- 新增 `time-blocks/YYYY-MM.json` 儲存使用者鎖定的 Time Block；建議時段只在查詢時產生，不寫入資料。鎖定與移動會新增 `lockedTimeBlock` Override 快照，取消鎖定不新增 Override。
+- Project 的 `effortEstimateMinutes` 由分鐘、小時或平均工作日換算；已花時間只計 Work Session。Schedule Weight、Must-Start-By 與 Deadline Risk Warning 均為即時計算值。
 
 ## 基本規則
 
@@ -54,7 +56,7 @@ data/
 
 - 「目前狀態」類的資料一種一個檔;「每天持續增加的紀錄」按月份分檔。月份依紀錄本身的時間決定(工作時段看 `startedAt`、時段看 `date`、調整紀錄看 `at`)。
 - `chrome.storage.local` 用同樣的切法當鍵名,例如 `projects`、`sessions/2026-09`。匯出時一個鍵對應一個檔案。
-- 清單類的檔案格式是 `{ "schemaVersion": 2, "items": [ ... ] }`。
+- 清單類的檔案格式是 `{ "schemaVersion": 3, "items": [ ... ] }`。
 - **匯出時機**:資料有變動後 30 秒內匯出一次。
 - Phase 2 會多一個放建議(Proposal)的收件匣資料夾,Phase 1 不建立。
 
@@ -64,7 +66,7 @@ data/
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "timezone": "Asia/Taipei",
   "pomodoro": { "focusMinutes": 50, "breakMinutes": 10 },
   "freeTimer": { "maxMinutes": 150 },
@@ -205,7 +207,7 @@ data/
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "weekly": {
     "mon": [{ "start": "09:00", "end": "12:00" }, { "start": "13:00", "end": "18:00" }],
     "tue": [{ "start": "09:00", "end": "12:00" }, { "start": "13:00", "end": "18:00" }],
@@ -285,9 +287,9 @@ data/
 | 專案總投入時間(週報用) | 已花時間,加上連結這個專案的固定行程時間(和工作時段重疊的部分只算一次) |
 | 剩餘工作量 | `effortEstimateMinutes` 減掉已花時間。小於等於 0 而專案還沒完成時,提醒你重新估計 |
 | 最晚開始日 | 從截止日往回,逐日累加每天的可用時間,累加到足夠剩餘工作量的那一天,再往前推 `safetyBufferWorkdays` 個工作日 |
-| 截止日緊迫度 | 由剩餘工作量和截止日前的可用時間算出,公式在實作排程引擎時決定 |
-| 排程權重分數 | 三個因子各自換算成 0–1,再依 `scheduleWeightFactors` 加權 |
-| 逾期預警 | 預估完成日比截止日晚超過 `lateDays` 天,或截止日前的可用時間低於剩餘工作量的 `availablePercent`% |
-| 建議時段、下一個 Task | 排程引擎依上面這些數值即時產生 |
+| 截止日緊迫度 | `min(1, 剩餘工作量 ÷ 從現在到截止日結束的可用時間)`；沒有截止日或剩餘工作量小於等於 0 時為 0 |
+| 排程權重分數 | 截止日緊迫度、Requester 權重、手動優先級各自換算成 0–1,再依 `scheduleWeightFactors` 加權 |
+| 逾期預警 | 預估完成日晚於截止日加 `lateDays`，或截止日前可用時間低於剩餘工作量乘 `availablePercent`% |
+| 建議時段、下一個 Task | 先分配 Must-Start-By 保底（已鎖定給該 Project 的時段會計入保底），再以最大餘數法按權重分配完整專注循環；鎖定時段內只選該 Project |
 
-**注意:** 最晚開始日和逾期預警目前用「整天的可用時間」估算,沒有扣掉其他專案會用掉的份額,算出來會偏樂觀。目前先用 120% 的預警門檻抵銷;實作排程引擎時再決定是否改用分配給該專案的時間。
+**注意:** 最晚開始日和逾期預警使用整天可用時間估算，沒有扣掉其他 Project 分走的份額；建議時段才會依當天剩餘空檔和權重分配。
