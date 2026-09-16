@@ -40,10 +40,10 @@ export function applyTimeBlockCommand(state: AppState, command: TimeBlockCommand
     if (!state.timeBlocks.some(b => b.id === command.timeBlockId)) return fail('time_block_not_found', '找不到鎖定時段');
     return succeed({ ...state, timeBlocks: state.timeBlocks.filter(b => b.id !== command.timeBlockId) });
   }
+  if (command.type === 'moveTimeBlock' && !state.timeBlocks.some(b => b.id === command.timeBlockId)) return fail('time_block_not_found', '找不到鎖定時段');
   const projectId = command.type === 'moveTimeBlock' ? state.timeBlocks.find(b => b.id === command.timeBlockId)?.projectId : command.projectId;
   if (!projectId || !state.projects.some(p => p.id === projectId && p.kind === 'project' && p.status === 'active')) return fail('project_not_found', '找不到可鎖定的專案');
   const id = command.type === 'moveTimeBlock' ? command.timeBlockId : undefined;
-  if (command.type === 'moveTimeBlock' && !state.timeBlocks.some(b => b.id === id)) return fail('time_block_not_found', '找不到鎖定時段');
   if (!validSlot(state, command.date, command.start, command.end, id)) return fail('invalid_time_block', '時段無效、重疊或撞到固定行程');
   const actual = snapshot({ projectId, date: command.date, start: command.start, end: command.end });
   const previous = command.type === 'moveTimeBlock' ? state.timeBlocks.find(b => b.id === command.timeBlockId) : undefined;

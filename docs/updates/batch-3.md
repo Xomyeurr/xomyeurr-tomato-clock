@@ -16,4 +16,10 @@
 ## 驗證
 
 - TDD 核心測試涵蓋 Effort Estimate、權重、保底、預警、建議分配與 Time Block 鎖定流程。
+- 後續補上六項邊界驗證：最大餘數法的權重分配、`moveTimeBlock` 的失敗路徑與自身重疊、鎖定未被建議的空檔時 `suggested` 記為 null、已鎖定時段與當天已做時間各自扣減 Must-Start-By 保底，以及剩餘工作量歸零或超出估時時 deadline urgency 固定為 0。
+- 每一項都以「改壞實作、確認測試轉紅」的方式驗證過；期望值一律依 docs/data-model.md 的規則手算，不從實作反推。
 - `npm test`、`npm run typecheck` 與 `npm run build` 均通過。
+
+## 修正
+
+- `moveTimeBlock` 的存在性檢查原本排在 projectId 查詢之後，而該 projectId 正是從這個 Time Block 身上查出來的：Time Block 不存在時會先誤報 `project_not_found`，真正的 `time_block_not_found` 分支永遠不會執行。已把檢查移到查詢之前，與 `unlockTimeBlock` 的行為一致。
