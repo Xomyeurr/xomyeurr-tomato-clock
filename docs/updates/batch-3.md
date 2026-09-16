@@ -10,7 +10,7 @@
 - 計算 Deadline Risk Warning，顯示預估完成日、可用分鐘、剩餘分鐘與觸發條件；支援 Project 個別門檻。
 - 依完整專注循環產生建議 Time Block；Commitment、鎖定時段與零碎空檔會從分配中排除。
 - 側邊欄與 popup 顯示建議、權重、Must-Start-By、預警與鎖定狀態；每個進行中 Project 都會顯示剩餘／可用分鐘與預估完成日。
-- 支援從建議或空檔鎖定、移動與取消鎖定 Time Block；鎖定／移動保存只含四個排程欄位的 `lockedTimeBlock` Override 快照。
+- 支援從建議或空檔鎖定、拖曳建議到另一個時段、移動與取消鎖定 Time Block；鎖定／移動保存只含四個排程欄位的 `lockedTimeBlock` Override 快照。
 - 儲存 schemaVersion 升至 3，新增按月分檔的 `time-blocks/YYYY-MM`。
 
 ## 驗證
