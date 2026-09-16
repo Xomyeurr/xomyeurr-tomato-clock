@@ -39,3 +39,4 @@ export {
 } from './planning';
 export type { DeadlineRiskWarning, ScheduleWeight } from './planning';
 export { getLockedTimeBlocks } from './time-blocks';
+export { DATA_SCHEMA_VERSION, exportDataFiles } from './export';

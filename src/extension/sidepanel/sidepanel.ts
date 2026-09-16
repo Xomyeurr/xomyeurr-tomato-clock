@@ -1,6 +1,6 @@
 import { type Command, getDayTimeline } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
-import { confirmationViews, retroactiveForm, summaryView, planningView } from '../daily-ui';
+import { adHocPromotionForm, confirmationViews, retroactiveForm, summaryView, planningView } from '../daily-ui';
 import { h, preserveDrafts } from '../ui';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -26,7 +26,7 @@ async function render(updateForm = false): Promise<void> {
         h('strong', {}, e.title), h('span', { className: 'small' }, `${status}${e.adHoc ? ' · 臨時工作' : ''}${e.endTimeUnconfirmed ? ' · 結束時間待確認' : ''}`),
         e.note ? h('p', { className: 'session-note' }, e.note) : null);
     }));
-  form.replaceChildren(retroactiveForm(state, send));
+  form.replaceChildren(...[adHocPromotionForm(state, send), retroactiveForm(state, send)].filter((item): item is HTMLElement => item !== null));
   restore();
 }
 void render();

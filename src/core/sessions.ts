@@ -39,7 +39,7 @@ function findRunningSession(state: AppState): WorkSession | undefined {
 }
 
 function sessionDue(state: AppState, session: WorkSession): Date {
-  return new Date(new Date(session.startedAt).getTime() + state.settings.pomodoro.focusMinutes * 60_000);
+  return new Date(new Date(session.startedAt).getTime() + (session.durationMinutes ?? state.settings.pomodoro.focusMinutes) * 60_000);
 }
 
 export function sessionAutoStop(state: AppState, session: WorkSession): Date {
@@ -186,7 +186,7 @@ export function applySessionCommand(
             id: ctx.newId('ses'),
             taskId: task.id,
             mode: command.type === 'startPomodoro' ? 'pomodoro' : 'freeTimer',
-            ...(command.type === 'startFreeTimer' ? { durationMinutes: command.durationMinutes ?? null } : {}),
+            durationMinutes: command.type === 'startFreeTimer' ? command.durationMinutes ?? null : state.settings.pomodoro.focusMinutes,
             startedAt: ts,
             endedAt: null,
             outcome: null,

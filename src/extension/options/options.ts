@@ -1,17 +1,104 @@
 import { workHoursSection, commitmentsSection } from './day-settings';
-import { getProjectRemainingMinutes, type AppState, type Command, type Project, type Requester, SELF_REQUESTER_ID, type Task } from '../../core';
+import { exportDataFiles, getProjectRemainingMinutes, INTERRUPT_BUCKET_ID, type AppState, type Command, type Commitment, type Project, type Requester, SELF_REQUESTER_ID, type Task } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
 import { field, h, todayIn, weightSelect } from '../ui';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let errorMessage: string | null = null;
 const editingProjects = new Set<string>();
+let exportDirectory: FileSystemDirectoryHandle | null = null;
+let exportMessage = '尚未連接資料夾；重開瀏覽器後需要重新授權。';
+let exportTimer: number | undefined;
 
 async function send(command: Command): Promise<boolean> {
   const result = await runCommand(command);
   errorMessage = result.ok ? null : result.error.message;
+  if (result.ok) scheduleExport();
   await render();
   return result.ok;
+}
+
+async function writeExportFile(directory: FileSystemDirectoryHandle, path: string, content: string): Promise<void> {
+  const parts = path.split('/');
+  let current = directory;
+  for (const part of parts.slice(0, -1)) current = await current.getDirectoryHandle(part, { create: true });
+  const file = await current.getFileHandle(parts.at(-1)!, { create: true });
+  const writable = await file.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+async function exportNow(): Promise<void> {
+  if (!exportDirectory) {
+    exportMessage = '尚未連接資料夾；請按「連接資料夾」授權後再匯出。';
+    return;
+  }
+  const state = await loadState();
+  const files = exportDataFiles(state, new Date());
+  for (const [path, content] of Object.entries(files)) await writeExportFile(exportDirectory, `data/${path}`, content);
+  exportMessage = `已匯出 ${Object.keys(files).length} 個檔案到 ./data。`;
+}
+
+function scheduleExport(): void {
+  if (!exportDirectory) return;
+  if (exportTimer !== undefined) window.clearTimeout(exportTimer);
+  exportTimer = window.setTimeout(() => {
+    void exportNow().then(render).catch(error => {
+      exportMessage = `匯出失敗：${error instanceof Error ? error.message : String(error)}`;
+      void render();
+    });
+  }, 30_000);
+}
+
+async function connectExportFolder(): Promise<void> {
+  const picker = (window as typeof window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
+  if (!picker) {
+    exportMessage = '這個瀏覽器不支援 File System Access API。';
+    await render();
+    return;
+  }
+  exportDirectory = await picker();
+  await exportNow();
+  await render();
+}
+
+function exportSection(): HTMLElement {
+  return h('section', { className: 'card stack' }, h('h2', {}, '資料匯出'),
+    h('p', { className: 'small muted' }, exportMessage),
+    h('div', { className: 'row' },
+      h('button', { type: 'button', onclick: () => void connectExportFolder().catch(error => { exportMessage = `連接失敗：${error instanceof Error ? error.message : String(error)}`; void render(); }) }, '連接資料夾'),
+      h('button', { type: 'button', onclick: () => void exportNow().then(render).catch(error => { exportMessage = `匯出失敗：${error instanceof Error ? error.message : String(error)}`; void render(); }) }, '立即匯出')));
+}
+
+function settingsSection(state: AppState): HTMLElement {
+  const focus = h('input', { type: 'number', min: 1, value: state.settings.pomodoro.focusMinutes });
+  const rest = h('input', { type: 'number', min: 1, value: state.settings.pomodoro.breakMinutes });
+  const max = h('input', { type: 'number', min: 1, value: state.settings.freeTimer.maxMinutes });
+  const deadline = h('input', { type: 'number', min: 0, step: 0.01, value: state.settings.scheduleWeightFactors.deadlineUrgency });
+  const requester = h('input', { type: 'number', min: 0, step: 0.01, value: state.settings.scheduleWeightFactors.requester });
+  const manual = h('input', { type: 'number', min: 0, step: 0.01, value: state.settings.scheduleWeightFactors.manualPriority });
+  const buffer = h('input', { type: 'number', min: 0, value: state.settings.mustStartBy.safetyBufferWorkdays });
+  const guarantee = h('input', { type: 'number', min: 1, value: state.settings.mustStartBy.guaranteedMinutesPerDay });
+  const late = h('input', { type: 'number', min: 0, value: state.settings.deadlineRisk.lateDays });
+  const available = h('input', { type: 'number', min: 0, value: state.settings.deadlineRisk.availablePercent });
+  return h('section', { className: 'card stack' }, h('h2', {}, '全域設定'),
+    h('form', { className: 'stack', onsubmit: (event: Event) => {
+      event.preventDefault();
+      void send({
+        type: 'updateSettings',
+        patch: {
+          pomodoro: { focusMinutes: Number(focus.value), breakMinutes: Number(rest.value) },
+          freeTimer: { maxMinutes: Number(max.value) },
+          scheduleWeightFactors: { deadlineUrgency: Number(deadline.value), requester: Number(requester.value), manualPriority: Number(manual.value) },
+          mustStartBy: { safetyBufferWorkdays: Number(buffer.value), guaranteedMinutesPerDay: Number(guarantee.value) },
+          deadlineRisk: { lateDays: Number(late.value), availablePercent: Number(available.value) },
+        },
+      });
+    } }, h('div', { className: 'grid' },
+      field('Pomodoro 專注分鐘', focus), field('休息分鐘', rest), field('碼錶上限分鐘', max),
+      field('截止日權重', deadline), field('Requester 權重', requester), field('手動優先級權重', manual),
+      field('安全緩衝工作日', buffer), field('每日保底分鐘', guarantee), field('延遲天數門檻', late), field('可用時間門檻 %', available)),
+      h('button', { type: 'submit' }, '儲存全域設定')));
 }
 
 function requesterSelect(state: AppState, selected: string | null): HTMLSelectElement {
@@ -41,6 +128,8 @@ function requesterRow(requester: Requester): HTMLLIElement {
       },
       '儲存',
     ),
+    requester.id === SELF_REQUESTER_ID ? null : h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'archiveRequester', requesterId: requester.id }) }, '封存'),
+    requester.id === SELF_REQUESTER_ID ? null : h('button', { type: 'button', className: 'small ghost', onclick: () => void send({ type: 'deleteRequester', requesterId: requester.id }) }, '刪除'),
   );
 }
 
@@ -179,6 +268,8 @@ function openTaskRow(task: Task): HTMLLIElement {
     h('div', { className: 'grow' }, title),
     h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'updateTask', taskId: task.id, title: title.value }) }, '儲存'),
     h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'completeTask', taskId: task.id }) }, '完成'),
+    h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'archiveTask', taskId: task.id }) }, '封存'),
+    h('button', { type: 'button', className: 'small ghost', onclick: () => void send({ type: 'deleteTask', taskId: task.id }) }, '刪除'),
   );
 }
 
@@ -235,6 +326,8 @@ function projectCard(state: AppState, project: Project): HTMLElement {
           '編輯',
         ),
         h('button', { type: 'button', onclick: () => void send({ type: 'completeProject', projectId: project.id }) }, '標記完成'),
+        h('button', { type: 'button', onclick: () => void send({ type: 'archiveProject', projectId: project.id }) }, '封存'),
+        h('button', { type: 'button', className: 'ghost', onclick: () => void send({ type: 'deleteProject', projectId: project.id }) }, '刪除'),
       );
 
   return h(
@@ -299,6 +392,20 @@ function doneProjectSection(state: AppState): HTMLElement | null {
   );
 }
 
+function archivedSection(state: AppState): HTMLElement | null {
+  const requesters = state.requesters.filter(item => item.status === 'archived');
+  const projects = state.projects.filter(item => item.kind === 'project' && item.status === 'archived');
+  const tasks = state.tasks.filter(item => item.status === 'archived');
+  const commitments = state.commitments.filter(item => item.status === 'archived');
+  if (!requesters.length && !projects.length && !tasks.length && !commitments.length) return null;
+  const item = (title: string, description: string) => h('li', {}, h('span', {}, title), h('span', { className: 'muted small' }, ` · ${description}`));
+  return h('section', { className: 'card stack' }, h('h2', {}, '已封存'),
+    requesters.length ? h('details', {}, h('summary', {}, `Requester(${requesters.length})`), h('ul', { className: 'list' }, ...requesters.map(row => item(row.name, `權重 ${row.defaultWeight}`)))) : null,
+    projects.length ? h('details', {}, h('summary', {}, `Project(${projects.length})`), h('ul', { className: 'list' }, ...projects.map(row => item(row.name, row.endDate ? `截止 ${row.endDate}` : '沒有截止日')))) : null,
+    tasks.length ? h('details', {}, h('summary', {}, `Task(${tasks.length})`), h('ul', { className: 'list' }, ...tasks.map(row => item(row.title, state.projects.find(project => project.id === row.projectId)?.name ?? (row.projectId === INTERRUPT_BUCKET_ID ? '臨時工作區' : row.projectId))))) : null,
+    commitments.length ? h('details', {}, h('summary', {}, `Commitment(${commitments.length})`), h('ul', { className: 'list' }, ...commitments.map((row: Commitment) => item(row.title, `${row.schedule.start}–${row.schedule.end}`)))) : null);
+}
+
 async function render(): Promise<void> {
   const state = await loadState();
   app.replaceChildren(
@@ -307,16 +414,20 @@ async function render(): Promise<void> {
       { className: 'stack' },
       h('h1', {}, '設定'),
       errorMessage ? h('div', { className: 'error', role: 'alert' }, errorMessage) : null,
+      settingsSection(state),
+      exportSection(),
       workHoursSection(state, send),
       commitmentsSection(state, send),
       requesterSection(state),
       projectSection(state),
       doneProjectSection(state),
+      archivedSection(state),
     ),
   );
 }
 
 void render();
 onStateChanged(() => {
+  scheduleExport();
   if (!app.contains(document.activeElement) || !document.activeElement?.matches('input, textarea, select')) void render();
 });

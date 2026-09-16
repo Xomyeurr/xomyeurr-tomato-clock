@@ -10,6 +10,7 @@ export type CommitmentCommand =
   | ({ type: 'createCommitment' } & Fields)
   | ({ type: 'updateCommitment'; commitmentId: string } & Fields)
   | { type: 'archiveCommitment'; commitmentId: string }
+  | { type: 'deleteCommitment'; commitmentId: string }
   | { type: 'skipCommitment'; commitmentId: string; date: string };
 
 export function getCommitmentsForDate(state: AppState, date: string): Commitment[] {
@@ -27,6 +28,9 @@ export function applyCommitmentCommand(state: AppState, command: CommitmentComma
   if (command.type !== 'createCommitment' && !state.commitments.some(c => c.id === command.commitmentId)) return fail('commitment_not_found', '找不到固定行程');
   if (command.type === 'archiveCommitment') {
     return succeed({ ...state, commitments: state.commitments.map(c => c.id === command.commitmentId ? { ...c, status: 'archived', updatedAt: ts } : c) });
+  }
+  if (command.type === 'deleteCommitment') {
+    return succeed({ ...state, commitments: state.commitments.filter(c => c.id !== command.commitmentId) });
   }
   if (command.type === 'skipCommitment') {
     if (!isValidDate(command.date)) return fail('invalid_date', '日期格式不正確');

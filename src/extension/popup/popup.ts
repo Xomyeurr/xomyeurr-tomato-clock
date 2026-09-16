@@ -1,7 +1,7 @@
 import { type AppState, type Command, getNextTask, getStartableTasks, getTimerStatus } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
 import { field, h, preserveDrafts } from '../ui';
-import { summaryView, retroactiveForm, confirmationViews, planningView } from '../daily-ui';
+import { summaryView, retroactiveForm, confirmationViews, planningView, adHocPromotionForm } from '../daily-ui';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let errorMessage: string | null = null;
@@ -168,7 +168,7 @@ async function render(preserve = true): Promise<void> {
     errorMessage ? h('div', { className: 'error', role: 'alert' }, errorMessage) : null,
     summaryView(state, send), ...confirmationViews(state, send), running ? runningView(state) : idleView(state),
     planningView(state, send),
-    running ? null : freeTimerForm(state), adHocForm(), retroactiveForm(state, send), footer()));
+    running ? null : freeTimerForm(state), adHocForm(), adHocPromotionForm(state, send), retroactiveForm(state, send), footer()));
   restore();
 }
 setInterval(() => {

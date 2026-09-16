@@ -24,6 +24,7 @@ describe('基本功能:番茄鐘', () => {
         id: 'ses_4',
         taskId: 'tsk_2',
         mode: 'pomodoro',
+        durationMinutes: 50,
         startedAt: '2026-09-15T10:00:00+08:00',
         endedAt: null,
         outcome: null,

@@ -1,4 +1,4 @@
-import { type AppState, type Command, formatTimestamp, getDaySummary, getDeadlineRiskWarning, getMustStartBy, getProjectRemainingMinutes, getScheduleWeight, getSuggestedTimeBlocks, getLockedTimeBlocks, localDateTime } from '../core';
+import { type AppState, type Command, formatTimestamp, getDaySummary, getDeadlineRiskWarning, getMustStartBy, getProjectRemainingMinutes, getScheduleWeight, getSuggestedTimeBlocks, getLockedTimeBlocks, INTERRUPT_BUCKET_ID, SELF_REQUESTER_ID, localDateTime } from '../core';
 import { field, h } from './ui';
 
 type Send = (command: Command) => Promise<unknown>;
@@ -101,4 +101,35 @@ export function confirmationViews(state: AppState, send: Send): HTMLElement[] {
       h('p', { className: 'small muted' }, `碼錶已自動停止於 ${s.endedAt!.slice(0, 19).replace('T', ' ')}（${state.settings.timezone}）`),
       field('實際結束時間', end), field('備註', note), error, h('button', { type: 'submit' }, '確認結束時間'));
   });
+}
+
+export function adHocPromotionForm(state: AppState, send: Send): HTMLElement | null {
+  const tasks = state.tasks.filter(task => task.projectId === INTERRUPT_BUCKET_ID && task.status === 'open');
+  const requesters = state.requesters.filter(requester => requester.status === 'active');
+  if (!tasks.length || !requesters.length) return null;
+  const task = h('select', { id: 'promote-task' }, ...tasks.map(item => h('option', { value: item.id }, item.title)));
+  const name = h('input', { id: 'promote-name', type: 'text', required: true, placeholder: '新的 Project 名稱' });
+  const requester = h('select', { id: 'promote-requester' }, ...requesters.map(item => h('option', { value: item.id }, item.name)));
+  requester.value = requesters.some(item => item.id === SELF_REQUESTER_ID) ? SELF_REQUESTER_ID : requesters[0]!.id;
+  const start = h('input', { id: 'promote-start', type: 'date', value: new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(new Date()), required: true });
+  const end = h('input', { id: 'promote-end', type: 'date' });
+  const priority = h('select', { id: 'promote-priority' }, ...[1, 2, 3, 4, 5].map(value => h('option', { value }, String(value))));
+  priority.value = '3';
+  const estimate = h('input', { id: 'promote-estimate', type: 'number', min: 1, placeholder: '可留白' });
+  return h('details', { className: 'card', id: 'promote-details' }, h('summary', {}, '臨時工作升級成 Project'),
+    h('form', { className: 'stack', onsubmit: (event: Event) => {
+      event.preventDefault();
+      void send({
+        type: 'promoteAdHocTaskToProject',
+        taskId: task.value,
+        name: name.value,
+        requesterId: requester.value,
+        startDate: start.value,
+        endDate: end.value || null,
+        manualPriority: Number(priority.value),
+        effortEstimateMinutes: estimate.value ? Number(estimate.value) : null,
+      });
+    } }, field('臨時工作', task), field('Project 名稱', name),
+      h('div', { className: 'grid' }, field('Requester', requester), field('開始日', start), field('截止日', end), field('手動優先級', priority), field('預估分鐘', estimate)),
+      h('button', { type: 'submit' }, '升級成 Project')));
 }

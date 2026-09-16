@@ -2,7 +2,7 @@
 
 一個只給自己用的 Chrome 擴充套件:把「中長期專案規劃」和「每天的輕量時間管理」接在一起,讓系統告訴你「現在該做什麼」,你只要專心做事。每天的時間可以用番茄鐘或碼錶計時、事後補登,也能排入會議和時段。
 
-> 目前狀態:**批次 3(多專案的排程規則)已完成,可以安裝到 Chrome 試用。**
+> 目前狀態:**批次 4(設定、資料匯出與收尾)已完成,可以安裝到 Chrome 試用。**
 
 ## 安裝與使用教學
 
@@ -201,11 +201,11 @@ npm run build
 
 詳見 [ADR 0001](./docs/adr/0001-extension-plus-companion-process.md)。
 
-## 批次 3 可以試用的功能
+## 批次 4 可以試用的功能
 
-設定 Project 的 Effort Estimate 與逾期預警門檻後，系統會依截止日緊迫度、Requester 權重和手動優先級計算 Schedule Weight，產生建議 Time Block 與每日保底。側邊欄可查看權重、Must-Start-By、Deadline Risk Warning，並鎖定、移動或取消鎖定時段。
+設定頁可調整 Pomodoro、碼錶上限、Schedule Weight 因子、Must-Start-By 保底與 Deadline Risk Warning 門檻。Requester、Project、Task 和 Commitment 可封存或在沒有工作紀錄時刪除；臨時工作可升級成正式 Project。設定頁也可連接資料夾，將 Chrome 內的資料單向匯出成 `./data` JSON 檔供 AI 讀取。
 
-完整批次三變更與驗證結果見 [docs/updates/batch-3.md](./docs/updates/batch-3.md)。
+完整批次四變更與驗證結果見 [docs/updates/batch-4.md](./docs/updates/batch-4.md)。
 
 ## 開發階段
 

@@ -66,6 +66,8 @@ export function commitmentsSection(state: AppState, send: Send): HTMLElement {
       return h('details', {}, h('summary', {}, `${c.title} · ${c.schedule.start}–${c.schedule.end}`), commitmentForm(state, send, c),
         h('form', { className: 'row', onsubmit: (event: Event) => { event.preventDefault(); void send({ type: 'skipCommitment', commitmentId: c.id, date: date.value }); } }, field('取消其中一次的日期', date), h('button', { type: 'submit' }, '取消這一次')),
         h('p', { className: 'small muted' }, `已取消日期：${c.skippedDates.join('、') || '無'}`),
-        h('button', { type: 'button', onclick: () => void send({ type: 'archiveCommitment', commitmentId: c.id }) }, '封存行程'));
+        h('div', { className: 'row' },
+          h('button', { type: 'button', onclick: () => void send({ type: 'archiveCommitment', commitmentId: c.id }) }, '封存行程'),
+          h('button', { type: 'button', className: 'ghost', onclick: () => void send({ type: 'deleteCommitment', commitmentId: c.id }) }, '刪除行程')));
     }));
 }
