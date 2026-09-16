@@ -203,3 +203,8 @@ details[open] > summary { margin-bottom: 12px; }
   .task-actions select,
   .task-actions input[type="date"] { flex: 1 1 120px; }
 }
+
+.gap-lock { border-top: 1px solid var(--line); padding-top: 8px; }
+.gap-lock summary { cursor: pointer; color: var(--muted); }
+.gap-lock form { margin-top: 6px; flex-wrap: wrap; }
+.gap-lock select { flex: 1 1 120px; }

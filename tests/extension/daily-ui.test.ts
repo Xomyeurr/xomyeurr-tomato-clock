@@ -69,12 +69,48 @@ test('each suggested time block carries its own lock button', () => {
   ]);
 });
 
-// #22:不要再依賴下方的下拉選單來選對象。
-test('planning view exposes no target-picking dropdown', () => {
+// #22:主要路徑不靠下拉選單 —— 建議時段區塊裡不能有選對象的 select。
+test('the suggested-block path needs no target-picking dropdown', () => {
   const { state } = fixture();
   const { send } = recorder();
+  const planning = planningView(state, send);
 
-  expect(planningView(state, send).querySelectorAll('select')).toHaveLength(0);
+  expect(planning.querySelectorAll('.suggested-list select')).toHaveLength(0);
+  expect(planning.querySelectorAll('.suggested-block select')).toHaveLength(0);
+  // 唯一的 select 是收起來的次要操作。
+  for (const select of planning.querySelectorAll('select')) {
+    expect(select.closest('details.gap-lock')).not.toBeNull();
+  }
+});
+
+// 批次 3 就支援「從建議或空檔鎖定」。#22 拿掉下方表單時把空檔鎖定也一起弄丟了,補回來。
+test('an arbitrary free slot can still be locked from a secondary control', () => {
+  const { state, projectId } = fixture();
+  const { sent, send } = recorder();
+
+  const details = planningView(state, send).querySelector('details.gap-lock') as HTMLDetailsElement;
+  expect(details).not.toBeNull();
+  expect(details.open).toBe(false); // 次要操作,預設收起來
+
+  const form = details.querySelector('form') as HTMLFormElement;
+  const [start, end] = Array.from(form.querySelectorAll('input[type="time"]')) as HTMLInputElement[];
+  start!.value = '14:00';
+  end!.value = '15:00';
+  form.dispatchEvent(new Event('submit'));
+
+  expect(sent).toEqual([{ type: 'lockTimeBlock', projectId, date: '2026-09-15', start: '14:00', end: '15:00' }]);
+});
+
+// 今天完全沒有可建議的完整空檔時,更需要手動鎖定的入口。
+test('the gap lock stays available when there is nothing to suggest', () => {
+  const { state: base, ctx } = fixture();
+  const state = applyOk(base, { type: 'createCommitment', title: '整天會議', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '09:00', end: '18:00' } }, ctx);
+  const { send } = recorder();
+  const planning = planningView(state, send);
+
+  expect(planning.querySelectorAll('.suggested-block')).toHaveLength(0);
+  expect(planning.querySelector('details.gap-lock')).not.toBeNull();
 });
 
 // #22:精簡文字說明 —— 建議時段只講時間和專案,不放大段敘述。

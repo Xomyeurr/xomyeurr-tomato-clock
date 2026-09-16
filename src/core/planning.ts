@@ -7,7 +7,30 @@ const DAY = 86_400_000;
 const previousDate = (date: string) => new Date(Date.parse(`${date}T12:00:00Z`) - DAY).toISOString().slice(0, 10);
 const parseMinute = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
 
+/**
+ * dayMinutes 和 getSuggestedTimeBlocks 都會被每個 Project 反覆問同樣的問題:
+ * getMustStartBy 一次要掃 367 天,而 planningView 又對每個 Project 各問一次預警。
+ * AppState 是不可變的,同一份 state 加上同一個時間點一定得到同樣的答案,
+ * 所以用 WeakMap 以 state 為鍵記住結果,state 換掉時快取自然被回收。
+ */
+const dayMinutesCache = new WeakMap<AppState, Map<DateString, number>>();
+const suggestionCache = new WeakMap<AppState, Map<number, TimeBlock[]>>();
+
+function memo<K, V>(cache: WeakMap<AppState, Map<K, V>>, state: AppState, key: K, compute: () => V): V {
+  let byKey = cache.get(state);
+  if (!byKey) { byKey = new Map<K, V>(); cache.set(state, byKey); }
+  if (byKey.has(key)) return byKey.get(key)!;
+  const value = compute();
+  byKey.set(key, value);
+  return value;
+}
+
 function dayMinutes(state: AppState, date: DateString, fromNow?: Date): number {
+  // 帶 fromNow 的版本跟「現在」有關,不進快取(呼叫次數也只有每次計算一次)。
+  return fromNow ? computeDayMinutes(state, date, fromNow) : memo(dayMinutesCache, state, date, () => computeDayMinutes(state, date));
+}
+
+function computeDayMinutes(state: AppState, date: DateString, fromNow?: Date): number {
   const zone = state.settings.timezone;
   const ranges = getWorkRanges(state, date).map(r => ({
     start: localDateTime(date, r.start, zone).getTime(), end: localDateTime(date, r.end, zone).getTime(),
@@ -159,6 +182,11 @@ export function getDeadlineRiskWarning(state: AppState, projectId: string, now: 
 }
 
 export function getSuggestedTimeBlocks(state: AppState, now: Date): TimeBlock[] {
+  // 回傳複本,呼叫端排序或改動都不會污染快取。
+  return [...memo(suggestionCache, state, now.getTime(), () => computeSuggestedTimeBlocks(state, now))];
+}
+
+function computeSuggestedTimeBlocks(state: AppState, now: Date): TimeBlock[] {
   const zone = state.settings.timezone; const date = new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(now);
   const available: { start: number; end: number }[] = getWorkRanges(state, date).map(r => ({ start: localDateTime(date, r.start, zone).getTime(), end: localDateTime(date, r.end, zone).getTime() })).map(r => ({ ...r, start: Math.max(r.start, now.getTime()) }));
   const commitments = getCommitmentsForDate(state, date).map(c => ({ start: localDateTime(date, c.schedule.start, zone).getTime(), end: localDateTime(date, c.schedule.end, zone).getTime() }));

@@ -6,6 +6,7 @@ import {
   getMustStartBy,
   getProjectRemainingMinutes,
   getScheduleWeight,
+  getSuggestedTimeBlocks,
 } from '../../src/core';
 import { applyOk, at, sequentialIds } from './helpers';
 
@@ -59,4 +60,31 @@ test('Must-Start-By remains finite when the weekly work template has no workdays
   const state = applyOk(initial, { type: 'setEffortEstimate', projectId, value: 50, unit: 'minutes' }, ctx);
   const noWorkdays = { ...state, workHours: { ...state.workHours, weekly: { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] } } };
   expect(getMustStartBy(noWorkdays, projectId, ctx.now)).toBe('2026-09-18');
+});
+
+// getSuggestedTimeBlocks 和 dayMinutes 有以 AppState 為鍵的快取,
+// 狀態換掉或時間往前走時都必須重算,不能回舊答案。
+test('cached scheduling queries follow state and clock changes', () => {
+  const ctx = { now: at('2026-09-15T09:00:00+08:00'), newId: sequentialIds() };
+  let state = createInitialState(ctx);
+  state = applyOk(state, { type: 'createProject', name: '甲', requesterId: 'req_self', startDate: '2026-09-15' }, ctx);
+  const projectId = state.projects[1]!.id;
+  state = applyOk(state, { type: 'createTask', projectId, title: '工作' }, ctx);
+
+  const before = getSuggestedTimeBlocks(state, ctx.now);
+  expect(before.length).toBeGreaterThan(0);
+
+  // 同一份 state、同一個時間:答案要一致。
+  expect(getSuggestedTimeBlocks(state, ctx.now)).toEqual(before);
+
+  // 時間往前走:今天剩的時間變少,建議時段跟著變少。
+  const later = getSuggestedTimeBlocks(state, at('2026-09-15T16:00:00+08:00'));
+  expect(later.length).toBeLessThan(before.length);
+
+  // 狀態改變(整個下午變成固定行程):建議時段要重算。
+  const busy = applyOk(state, { type: 'createCommitment', title: '整天會議', projectId: null,
+    schedule: { type: 'once', date: '2026-09-15', start: '09:00', end: '18:00' } }, ctx);
+  expect(getSuggestedTimeBlocks(busy, ctx.now)).toEqual([]);
+  // 舊的 state 物件仍然給舊答案,沒有被污染。
+  expect(getSuggestedTimeBlocks(state, ctx.now)).toEqual(before);
 });

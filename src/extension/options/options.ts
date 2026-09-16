@@ -293,7 +293,8 @@ function openTaskRow(task: Task): HTMLLIElement {
     } else if (action.value === 'archive') {
       void send({ type: 'archiveTask', taskId: task.id });
     } else if (action.value === 'delete') {
-      void send({ type: 'deleteTask', taskId: task.id });
+      // 「封存」和「刪除」在同一個下拉選單裡相鄰,選錯就沒得救,所以先確認。
+      if (window.confirm(`刪除 Task「${task.title}」？`)) void send({ type: 'deleteTask', taskId: task.id });
     }
   };
   return h(
@@ -354,7 +355,8 @@ function projectCard(state: AppState, project: Project): HTMLElement {
     } else if (projectAction.value === 'archive') {
       void send({ type: 'archiveProject', projectId: project.id });
     } else if (projectAction.value === 'delete') {
-      void send({ type: 'deleteProject', projectId: project.id });
+      // 刪除 Project 會連底下的 Task 一起刪掉,更要先確認。
+      if (window.confirm(`刪除專案「${project.name}」？底下的 Task 會一起刪除。`)) void send({ type: 'deleteProject', projectId: project.id });
     }
   };
 

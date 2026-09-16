@@ -50,14 +50,12 @@ export function workHoursSection(state: AppState, send: Send): HTMLElement {
         h('strong', { className: 'work-hours-day' }, row.label),
         row.editor ? h('div', { className: 'grow' }, row.editor.element) : h('div', { className: 'grow work-hours-summary' }, rangeSummary(row.ranges)),
         h('button', { type: 'button', className: 'small', onclick: (event: Event) => {
+          // 可以同時展開多列一起改:「儲存每週工時」會把所有展開的列一次寫入。
           if (editingWeekdays.has(row.weekday)) editingWeekdays.delete(row.weekday);
-          else {
-            editingWeekdays.clear();
-            editingWeekdays.add(row.weekday);
-          }
+          else editingWeekdays.add(row.weekday);
           (event.currentTarget as HTMLElement).closest('section')?.replaceWith(workHoursSection(state, send));
         } }, row.editor ? '收合' : '編輯')))),
-    h('button', { type: 'submit', className: 'primary' }, '儲存每週工時')));
+    h('button', { type: 'submit', className: 'primary', disabled: rows.every(row => row.editor === null) }, '儲存每週工時')));
 }
 export function dayOverrideSection(state: AppState, send: Send): HTMLElement {
   const date = h('input', { type: 'date', value: todayIn(state.settings.timezone), required: true });
@@ -70,7 +68,12 @@ export function dayOverrideSection(state: AppState, send: Send): HTMLElement {
   return h('section', { className: 'card stack' }, h('h2', {}, '單日調整'),
     h('p', { className: 'small muted' }, '單日調整只覆蓋選定日期；沒有調整的日期會沿用每週工時範本。'),
     h('form', { className: 'stack', onsubmit: (event: Event) => {
-      event.preventDefault(); void send({ type: 'setDayWorkHours', date: date.value, ranges: editor.read() });
+      event.preventDefault();
+      const ranges = editor.read();
+      // 表單會先填入週範本當起點。沒有動過就送出的話不該把這天釘住,
+      // 否則之後改週範本會莫名其妙不套用到這一天。
+      if (state.workHours.dayOverrides[date.value] === undefined && sameRanges(ranges, getWorkRanges(state, date.value))) return;
+      void send({ type: 'setDayWorkHours', date: date.value, ranges });
     } }, field('日期', date), holder, h('div', { className: 'row' }, h('button', { type: 'submit' }, '儲存單日調整'),
       h('button', { type: 'button', onclick: () => void send({ type: 'resetDayWorkHours', date: date.value }) }, '恢復週範本'))),
     h('div', { className: 'row' }, h('span', { className: 'small muted' }, '已調整：'), overrideDates.length ? null : h('span', { className: 'small muted' }, '無'),
@@ -129,7 +132,7 @@ export function commitmentsSection(state: AppState, send: Send, refresh?: Refres
         return h('li', { className: 'stack' }, commitmentForm(state, send, commitment, () => editingCommitments.delete(commitment.id), refresh),
           h('button', { type: 'button', className: 'small ghost', onclick: (event: Event) => {
             editingCommitments.delete(commitment.id);
-            (event.currentTarget as HTMLElement).closest('section')?.replaceWith(commitmentsSection(state, send));
+            (event.currentTarget as HTMLElement).closest('section')?.replaceWith(commitmentsSection(state, send, refresh));
           } }, '取消編輯'));
       }
       const skipDate = h('input', { type: 'date', value: todayIn(state.settings.timezone), required: true, hidden: true, 'aria-label': '取消其中一次的日期' });
@@ -146,7 +149,7 @@ export function commitmentsSection(state: AppState, send: Send, refresh?: Refres
           h('span', { className: 'muted small' }, `${commitmentScheduleSummary(commitment)} · ${projectName}${commitment.skippedDates.length ? ` · 已取消 ${commitment.skippedDates.length} 次` : ''}`)),
         h('button', { type: 'button', className: 'small', onclick: (event: Event) => {
           editingCommitments.add(commitment.id);
-          (event.currentTarget as HTMLElement).closest('section')?.replaceWith(commitmentsSection(state, send));
+          (event.currentTarget as HTMLElement).closest('section')?.replaceWith(commitmentsSection(state, send, refresh));
         } }, '編輯'),
         h('div', { className: 'task-actions' }, skipDate, action,
           h('button', { type: 'button', className: 'small', onclick: () => {

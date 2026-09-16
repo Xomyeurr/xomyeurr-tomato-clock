@@ -60,3 +60,18 @@ export function buttonLabelled(root: ParentNode, label: string): HTMLButtonEleme
   if (!button) throw new Error(`找不到按鈕「${label}」,現有按鈕:${Array.from(root.querySelectorAll('button')).map(b => b.textContent).join('、')}`);
   return button;
 }
+
+/** 把 core 的 AppState 轉成 chrome.storage.local 的鍵值,當作測試的種子資料。 */
+export function seedFromState(state: {
+  settings: unknown; requesters: unknown; projects: unknown; tasks: unknown; commitments: unknown; workHours: unknown;
+}): Record<string, unknown> {
+  return {
+    meta: { schemaVersion: 3 },
+    'work-hours': state.workHours,
+    settings: state.settings,
+    requesters: state.requesters,
+    projects: state.projects,
+    tasks: state.tasks,
+    commitments: state.commitments,
+  };
+}

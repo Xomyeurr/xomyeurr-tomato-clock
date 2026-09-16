@@ -62,7 +62,29 @@ export function planningView(state: AppState, send?: Send): HTMLElement {
         send ? h('button', { type: 'submit', className: 'small' }, '移動') : null,
         send ? h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'unlockTimeBlock', timeBlockId: b.id }) }, '取消鎖定') : null);
     }),
+    gapLockForm(state, date, send),
   );
+}
+
+/**
+ * 建議時段以外的空檔也要鎖得住:今天的時間可能全被權重高的 Project 分走,
+ * 或根本沒有完整空檔可建議,這時仍然要能把某段時間留給指定的 Project。
+ * 收在 details 裡當次要操作,主要路徑還是每個建議時段自己的「鎖定」按鈕(#22)。
+ */
+function gapLockForm(state: AppState, date: string, send?: Send): HTMLElement | null {
+  if (!send) return null;
+  const lockable = state.projects.filter(p => p.kind === 'project' && p.status === 'active'
+    && state.tasks.some(t => t.projectId === p.id && t.status === 'open'));
+  if (!lockable.length) return null;
+  const project = h('select', { 'aria-label': '要鎖定的專案' }, ...lockable.map(p => h('option', { value: p.id }, p.name)));
+  const start = h('input', { type: 'time', value: '09:00', required: true, 'aria-label': '開始時間' });
+  const end = h('input', { type: 'time', value: '09:50', required: true, 'aria-label': '結束時間' });
+  return h('details', { className: 'gap-lock', id: 'gap-lock-details' },
+    h('summary', { className: 'small' }, '鎖定其他時段'),
+    h('form', { className: 'row small', onsubmit: (event: Event) => {
+      event.preventDefault();
+      void send({ type: 'lockTimeBlock', projectId: project.value, date, start: start.value, end: end.value });
+    } }, project, start, h('span', {}, '–'), end, h('button', { type: 'submit', className: 'small' }, '鎖定')));
 }
 export function summaryView(state: AppState, adjust?: Send): HTMLElement {
   const summary = getDaySummary(state, new Date());
