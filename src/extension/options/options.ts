@@ -1,4 +1,4 @@
-import { workHoursSection, commitmentsSection } from './day-settings';
+import { workHoursSection, dayOverrideSection, commitmentsSection } from './day-settings';
 import { exportDataFiles, getProjectRemainingMinutes, INTERRUPT_BUCKET_ID, type AppState, type Command, type Commitment, type Project, type Requester, SELF_REQUESTER_ID, type Task } from '../../core';
 import { loadState, onStateChanged, runCommand } from '../storage';
 import { field, h, todayIn, weightSelect } from '../ui';
@@ -6,6 +6,7 @@ import { field, h, todayIn, weightSelect } from '../ui';
 const app = document.querySelector<HTMLElement>('#app')!;
 let errorMessage: string | null = null;
 const editingProjects = new Set<string>();
+const editingTasks = new Set<string>();
 let exportDirectory: FileSystemDirectoryHandle | null = null;
 let exportMessage = '尚未連接資料夾；重開瀏覽器後需要重新授權。';
 let exportTimer: number | undefined;
@@ -262,14 +263,45 @@ function projectSummary(state: AppState, project: Project): string {
 
 function openTaskRow(task: Task): HTMLLIElement {
   const title = h('input', { type: 'text', value: task.title, 'aria-label': 'Task 標題' });
+  if (editingTasks.has(task.id)) {
+    return h(
+      'li',
+      { className: 'task-row' },
+      h('div', { className: 'grow' }, title),
+      h('button', { type: 'button', className: 'small', onclick: async () => {
+        editingTasks.delete(task.id);
+        if (!(await send({ type: 'updateTask', taskId: task.id, title: title.value }))) {
+          editingTasks.add(task.id);
+          await render();
+        }
+      } }, '儲存名稱'),
+      h('button', { type: 'button', className: 'small ghost', onclick: () => {
+        editingTasks.delete(task.id);
+        void render();
+      } }, '取消'),
+    );
+  }
+  const action = h('select', { 'aria-label': 'Task 操作' },
+    h('option', { value: '' }, '操作'),
+    h('option', { value: 'rename' }, '重新命名'),
+    h('option', { value: 'archive' }, '封存'),
+    h('option', { value: 'delete' }, '刪除'));
+  const runAction = () => {
+    if (action.value === 'rename') {
+      editingTasks.add(task.id);
+      void render();
+    } else if (action.value === 'archive') {
+      void send({ type: 'archiveTask', taskId: task.id });
+    } else if (action.value === 'delete') {
+      void send({ type: 'deleteTask', taskId: task.id });
+    }
+  };
   return h(
     'li',
-    { className: 'row' },
-    h('div', { className: 'grow' }, title),
-    h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'updateTask', taskId: task.id, title: title.value }) }, '儲存'),
+    { className: 'task-row' },
+    h('span', { className: 'grow task-title' }, task.title),
     h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'completeTask', taskId: task.id }) }, '完成'),
-    h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'archiveTask', taskId: task.id }) }, '封存'),
-    h('button', { type: 'button', className: 'small ghost', onclick: () => void send({ type: 'deleteTask', taskId: task.id }) }, '刪除'),
+    h('div', { className: 'task-actions' }, action, h('button', { type: 'button', className: 'small', onclick: runAction }, '執行')),
   );
 }
 
@@ -278,7 +310,7 @@ function planningControls(state: AppState, project: Project): HTMLElement {
   const unit = h('select', {}, h('option', { value: 'minutes' }, '分鐘'), h('option', { value: 'hours' }, '小時'), h('option', { value: 'days' }, '工作日'));
   const lateDays = h('input', { type: 'number', min: 0, value: project.deadlineRiskOverride?.lateDays ?? '' });
   const available = h('input', { type: 'number', min: 0, value: project.deadlineRiskOverride?.availablePercent ?? '' });
-  return h('details', { className: 'planning-controls' }, h('summary', {}, '預估工作量與逾期預警'),
+  return h('details', { className: 'planning-controls' }, h('summary', {}, '規劃設定'),
     h('form', { className: 'stack', onsubmit: (event: Event) => { event.preventDefault(); void send({ type: 'setEffortEstimate', projectId: project.id, value: Number(value.value), unit: unit.value as 'minutes' | 'hours' | 'days' }); } },
       h('div', { className: 'row' }, field('工作量', value), field('單位', unit), h('button', { type: 'submit' }, '儲存預估'))),
     h('form', { className: 'stack', onsubmit: (event: Event) => { event.preventDefault(); void send({ type: 'setDeadlineRiskThreshold', projectId: project.id, lateDays: lateDays.value ? Number(lateDays.value) : undefined, availablePercent: available.value ? Number(available.value) : undefined }); } },
@@ -307,6 +339,24 @@ function projectCard(state: AppState, project: Project): HTMLElement {
   const openTasks = tasks.filter((t) => t.status === 'open');
   const doneTasks = tasks.filter((t) => t.status === 'done');
   const taskTitle = h('input', { type: 'text', placeholder: '新增 Task,例如:修 code review 抓到的權限 bug' });
+  const projectAction = h('select', { 'aria-label': 'Project 操作' },
+    h('option', { value: '' }, '操作'),
+    h('option', { value: 'edit' }, '編輯'),
+    h('option', { value: 'complete' }, '標記完成'),
+    h('option', { value: 'archive' }, '封存'),
+    h('option', { value: 'delete' }, '刪除'));
+  const runProjectAction = () => {
+    if (projectAction.value === 'edit') {
+      editingProjects.add(project.id);
+      void render();
+    } else if (projectAction.value === 'complete') {
+      void send({ type: 'completeProject', projectId: project.id });
+    } else if (projectAction.value === 'archive') {
+      void send({ type: 'archiveProject', projectId: project.id });
+    } else if (projectAction.value === 'delete') {
+      void send({ type: 'deleteProject', projectId: project.id });
+    }
+  };
 
   const header = editingProjects.has(project.id)
     ? editProjectForm(state, project)
@@ -314,20 +364,7 @@ function projectCard(state: AppState, project: Project): HTMLElement {
         'div',
         { className: 'row' },
         h('div', { className: 'grow' }, h('strong', {}, project.name), h('div', { className: 'muted small' }, projectSummary(state, project))),
-        h(
-          'button',
-          {
-            type: 'button',
-            onclick: () => {
-              editingProjects.add(project.id);
-              void render();
-            },
-          },
-          '編輯',
-        ),
-        h('button', { type: 'button', onclick: () => void send({ type: 'completeProject', projectId: project.id }) }, '標記完成'),
-        h('button', { type: 'button', onclick: () => void send({ type: 'archiveProject', projectId: project.id }) }, '封存'),
-        h('button', { type: 'button', className: 'ghost', onclick: () => void send({ type: 'deleteProject', projectId: project.id }) }, '刪除'),
+        h('div', { className: 'task-actions' }, projectAction, h('button', { type: 'button', className: 'small', onclick: runProjectAction }, '執行')),
       );
 
   return h(
@@ -335,7 +372,6 @@ function projectCard(state: AppState, project: Project): HTMLElement {
     { className: 'card stack' },
     header,
     h('span', { className: 'muted small' }, `進行中的 Task(${openTasks.length})`),
-    planningControls(state, project),
     openTasks.length ? h('ul', { className: 'list' }, ...openTasks.map(openTaskRow)) : h('p', { className: 'muted small' }, '沒有進行中的 Task。'),
     h(
       'form',
@@ -349,6 +385,7 @@ function projectCard(state: AppState, project: Project): HTMLElement {
       h('div', { className: 'grow' }, taskTitle),
       h('button', { type: 'submit' }, '新增 Task'),
     ),
+    planningControls(state, project),
     doneTaskList(doneTasks),
   );
 }
@@ -417,6 +454,7 @@ async function render(): Promise<void> {
       settingsSection(state),
       exportSection(),
       workHoursSection(state, send),
+      dayOverrideSection(state, send),
       commitmentsSection(state, send),
       requesterSection(state),
       projectSection(state),

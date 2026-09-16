@@ -1,39 +1,78 @@
-import { type AppState, type Command, type Commitment, type CommitmentSchedule, type TimeRange, type Weekday } from '../../core';
+import { type AppState, type Command, type Commitment, type CommitmentSchedule, getWorkRanges, type TimeRange, type Weekday } from '../../core';
 import { field, h, todayIn } from '../ui';
 
 type Send = (command: Command) => Promise<unknown>;
 const weekdays: [Weekday, string][] = [['mon', '週一'], ['tue', '週二'], ['wed', '週三'], ['thu', '週四'], ['fri', '週五'], ['sat', '週六'], ['sun', '週日']];
-function rangesEditor(ranges: TimeRange[]) {
-  const rows = h('div', { className: 'stack' });
+const editingWeekdays = new Set<Weekday>();
+function rangesEditor(ranges: TimeRange[], compact = false) {
+  const rows = h('div', { className: compact ? 'range-list' : 'stack' });
   const controls: { start: HTMLInputElement; end: HTMLInputElement; row: HTMLElement }[] = [];
   function add(range: TimeRange = { start: '09:00', end: '18:00' }): void {
     const start = h('input', { type: 'time', value: range.start, required: true, 'aria-label': '上班時間' });
     const end = h('input', { type: 'time', value: range.end, required: true, 'aria-label': '下班時間' });
-    const row = h('div', { className: 'row' }, start, end, h('button', { type: 'button', onclick: () => row.remove() }, '移除時段'));
+    const row = h('div', { className: compact ? 'range-row compact' : 'row' }, start, end,
+      h('button', { type: 'button', className: compact ? 'small ghost' : undefined, 'aria-label': '移除時段', onclick: () => row.remove() }, compact ? 'x' : '移除時段'));
     controls.push({ start, end, row }); rows.append(row);
   }
   ranges.forEach(add);
-  return { element: h('div', { className: 'stack' }, rows, h('button', { type: 'button', onclick: () => add() }, '新增時段')),
+  return { element: h('div', { className: compact ? 'range-editor compact' : 'stack' }, rows,
+    h('button', { type: 'button', className: compact ? 'small' : undefined, 'aria-label': '新增時段', onclick: () => add() }, compact ? '+' : '新增時段')),
     read: () => controls.filter(c => c.row.parentElement === rows).map(c => ({ start: c.start.value, end: c.end.value })) };
 }
+function sameRanges(a: TimeRange[], b: TimeRange[]): boolean {
+  return a.length === b.length && a.every((range, index) => range.start === b[index]?.start && range.end === b[index]?.end);
+}
+function rangeSummary(ranges: TimeRange[]): string {
+  return ranges.length ? ranges.map(r => `${r.start}-${r.end}`).join('、') : '不上班';
+}
 export function workHoursSection(state: AppState, send: Send): HTMLElement {
-  const weekly = weekdays.map(([weekday, label]) => {
-    const editor = rangesEditor(state.workHours.weekly[weekday]);
-    return h('details', {}, h('summary', {}, label), h('form', { className: 'stack', onsubmit: (event: Event) => {
-      event.preventDefault(); void send({ type: 'setWeeklyWorkHours', weekday, ranges: editor.read() });
-    } }, editor.element, h('button', { type: 'submit' }, `儲存${label}`)));
-  });
+  const rows = weekdays.map(([weekday, label]) => ({
+    weekday,
+    label,
+    ranges: state.workHours.weekly[weekday],
+    editor: editingWeekdays.has(weekday) ? rangesEditor(state.workHours.weekly[weekday], true) : null,
+  }));
+  return h('section', { className: 'card stack' }, h('h2', {}, '每週工時範本'),
+    h('p', { className: 'small muted' }, `時間依 ${state.settings.timezone}。週一到週日一眼可看；點一列編輯，移除全部時段並儲存代表不上班。`),
+    h('form', { className: 'stack', onsubmit: async (event: Event) => {
+      event.preventDefault();
+      for (const row of rows.filter(item => item.editor !== null)) {
+        const editor = row.editor;
+        if (!editor) continue;
+        const ranges = editor.read();
+        if (!sameRanges(ranges, state.workHours.weekly[row.weekday])) await send({ type: 'setWeeklyWorkHours', weekday: row.weekday, ranges });
+      }
+    } },
+    h('div', { className: 'work-hours-grid' }, ...rows.map(row =>
+      h('div', { className: 'work-hours-row' },
+        h('strong', { className: 'work-hours-day' }, row.label),
+        row.editor ? h('div', { className: 'grow' }, row.editor.element) : h('div', { className: 'grow work-hours-summary' }, rangeSummary(row.ranges)),
+        h('button', { type: 'button', className: 'small', onclick: (event: Event) => {
+          if (editingWeekdays.has(row.weekday)) editingWeekdays.delete(row.weekday);
+          else {
+            editingWeekdays.clear();
+            editingWeekdays.add(row.weekday);
+          }
+          (event.currentTarget as HTMLElement).closest('section')?.replaceWith(workHoursSection(state, send));
+        } }, row.editor ? '收合' : '編輯')))),
+    h('button', { type: 'submit', className: 'primary' }, '儲存每週工時')));
+}
+export function dayOverrideSection(state: AppState, send: Send): HTMLElement {
   const date = h('input', { type: 'date', value: todayIn(state.settings.timezone), required: true });
-  let editor = rangesEditor(state.workHours.dayOverrides[date.value] ?? []);
+  const rangesForDate = (value: string) => (state.workHours.dayOverrides[value] ?? getWorkRanges(state, value)).map(r => ({ ...r }));
+  let editor = rangesEditor(rangesForDate(date.value));
   const holder = h('div', {}, editor.element);
-  date.addEventListener('change', () => { editor = rangesEditor(state.workHours.dayOverrides[date.value] ?? []); holder.replaceChildren(editor.element); });
-  return h('section', { className: 'card stack' }, h('h2', {}, '每週工時範本與單日調整'),
-    h('p', { className: 'small muted' }, `時間依 ${state.settings.timezone}。可新增多段時段；移除全部時段並儲存代表不上班。`), ...weekly,
-    h('h3', {}, '單日調整'), h('form', { className: 'stack', onsubmit: (event: Event) => {
+  const loadDate = (value: string) => { date.value = value; editor = rangesEditor(rangesForDate(date.value)); holder.replaceChildren(editor.element); };
+  date.addEventListener('change', () => loadDate(date.value));
+  const overrideDates = Object.keys(state.workHours.dayOverrides).sort();
+  return h('section', { className: 'card stack' }, h('h2', {}, '單日調整'),
+    h('p', { className: 'small muted' }, '單日調整只覆蓋選定日期；沒有調整的日期會沿用每週工時範本。'),
+    h('form', { className: 'stack', onsubmit: (event: Event) => {
       event.preventDefault(); void send({ type: 'setDayWorkHours', date: date.value, ranges: editor.read() });
     } }, field('日期', date), holder, h('div', { className: 'row' }, h('button', { type: 'submit' }, '儲存單日調整'),
       h('button', { type: 'button', onclick: () => void send({ type: 'resetDayWorkHours', date: date.value }) }, '恢復週範本'))),
-    h('p', { className: 'small muted' }, `已調整：${Object.keys(state.workHours.dayOverrides).sort().join('、') || '無'}`));
+    h('div', { className: 'row' }, h('span', { className: 'small muted' }, '已調整：'), overrideDates.length ? null : h('span', { className: 'small muted' }, '無'),
+      ...overrideDates.map(value => h('button', { type: 'button', className: 'small', onclick: () => loadDate(value) }, value))));
 }
 function commitmentForm(state: AppState, send: Send, commitment?: Commitment): HTMLElement {
   const schedule = commitment?.schedule;
