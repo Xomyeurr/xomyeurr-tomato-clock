@@ -17,6 +17,7 @@
 
 - TDD 核心測試涵蓋 Effort Estimate、權重、保底、預警、建議分配與 Time Block 鎖定流程。
 - 後續補上六項邊界驗證：最大餘數法的權重分配、`moveTimeBlock` 的失敗路徑與自身重疊、鎖定未被建議的空檔時 `suggested` 記為 null、已鎖定時段與當天已做時間各自扣減 Must-Start-By 保底，以及剩餘工作量歸零或超出估時時 deadline urgency 固定為 0。
+- extension 的 storage 層另有測試：schemaVersion 1 的資料遷移後保留既有紀錄並補上批次 3 的預設值、鎖定時段依日期分月存入 `time-blocks/YYYY-MM`、載入時再合併回單一陣列、資料版本較新時拒絕載入、指令失敗時完全不寫入。測試只假造 `chrome.storage.local`，`navigator.locks` 使用實際實作，連上鎖路徑一起涵蓋。
 - 每一項都以「改壞實作、確認測試轉紅」的方式驗證過；期望值一律依 docs/data-model.md 的規則手算，不從實作反推。
 - `npm test`、`npm run typecheck` 與 `npm run build` 均通過。
 
