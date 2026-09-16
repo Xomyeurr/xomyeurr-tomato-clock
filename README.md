@@ -202,6 +202,12 @@ npm run build
 
 詳見 [ADR 0001](./docs/adr/0001-extension-plus-companion-process.md)。
 
+## 批次 7 可以試用的功能
+
+已過 Must-Start-By 的專案如果今天的保底時間被其他同樣逾期的專案搶走,現在會出現「今天分不到每日保底時間」的逾期預警,不會再被默默吞掉。其餘是測試補強:批次 5 的 popup 與側邊欄調整原本只有人工驗證,現在都有自動化迴歸測試。
+
+完整批次七變更與驗證結果見 [docs/updates/batch-7.md](./docs/updates/batch-7.md)。
+
 ## 批次 6 可以試用的功能
 
 時間軸現在會在各種邊界情境下把 Commitment 從上班時段扣掉，不會再顯示互相重疊的上班時段與固定行程。新增或修改 Commitment 時，已鎖定的 Time Block 也會自動避開衝突時間。Settings page 的固定行程區改成新增表單加管理清單，既有 Commitment 可直接掃描摘要、進入編輯，取消一次、封存、刪除收在次要操作裡。
