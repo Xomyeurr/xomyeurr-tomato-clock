@@ -78,3 +78,16 @@ test('creating a middle Commitment splits a locked Time Block into remaining par
 
   expect(getLockedTimeBlocks(state, '2026-09-15').map(b => [b.start, b.end])).toEqual([['09:00', '10:00'], ['11:00', '12:00']]);
 });
+
+test('a new Commitment does not rewrite locked Time Blocks on past dates', () => {
+  const { state: initial, ctx, first } = setup();
+  // 2026-09-08 是上週二,已經過去了。
+  const past = { now: at('2026-09-08T08:00:00+08:00'), newId: ctx.newId };
+  let state = applyOk(initial, { type: 'lockTimeBlock', projectId: first, date: '2026-09-08', start: '09:00', end: '12:00' }, past);
+
+  // 從今年年初開始、每週二的固定行程,不應該回頭改寫上週已經發生的紀錄。
+  state = applyOk(state, { type: 'createCommitment', title: '週會', projectId: null,
+    schedule: { type: 'weekly', fromDate: '2026-01-01', untilDate: null, weekdays: ['tue'], start: '09:00', end: '12:00' } }, ctx);
+
+  expect(getLockedTimeBlocks(state, '2026-09-08').map(b => [b.start, b.end])).toEqual([['09:00', '12:00']]);
+});

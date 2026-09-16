@@ -42,8 +42,12 @@ function subtractRanges(range: TimeRange, blockers: TimeRange[]): TimeRange[] {
 }
 
 function reconcileLockedTimeBlocks(state: AppState, ctx: Context, updatedAt: string): AppState {
+  // 只整理今天以後的鎖定時段。重複性的 Commitment 可以從過去的日期開始,
+  // 但已經發生的鎖定時段是歷史紀錄,不能被回頭改寫或刪掉。
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(ctx.now);
   const timeBlocks: TimeBlock[] = [];
   for (const block of state.timeBlocks) {
+    if (block.date < today) { timeBlocks.push(block); continue; }
     const blockers = getCommitmentsForDate(state, block.date).map(c => ({ start: c.schedule.start, end: c.schedule.end }));
     const parts = subtractRanges(block, blockers);
     parts.forEach((part, index) => {

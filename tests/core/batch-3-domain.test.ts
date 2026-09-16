@@ -498,3 +498,34 @@ test('a Project past Must-Start-By that loses the guarantee conflict is warned, 
   expect(getDeadlineRiskWarning(state, winner!, ctx.now)!.conditions).not.toContain('guarantee_not_met');
   expect(getDeadlineRiskWarning(state, loser!, ctx.now)!.conditions).toContain('guarantee_not_met');
 });
+
+// Story 76 只針對「保底被別人搶走」。沒人拿得到保底的日子(例如休假日)不算衝突,不該每天都叫。
+test('a lone late Project is not warned about the guarantee on a day nobody could be allocated time', () => {
+  const ctx = { now: at('2026-09-19T17:00:00+08:00'), newId: sequentialIds() };
+  let state = createInitialState(ctx);
+  state = applyOk(state, { type: 'createProject', name: '獨自逾期', requesterId: 'req_self',
+    startDate: '2026-09-01', endDate: '2026-09-23', effortEstimateMinutes: 1500 }, ctx);
+  const projectId = state.projects[1]!.id;
+  state = applyOk(state, { type: 'createTask', projectId, title: '工作' }, ctx);
+  state = applyOk(state, { type: 'setDayWorkHours', date: '2026-09-19', ranges: [] }, ctx); // 當天休假,沒有人拿得到保底
+
+  expect(getMustStartBy(state, projectId, ctx.now)! <= '2026-09-19').toBe(true);
+  expect(getSuggestedTimeBlocks(state, ctx.now)).toEqual([]);
+  expect(getDeadlineRiskWarning(state, projectId, ctx.now)!.conditions).not.toContain('guarantee_not_met');
+});
+
+// Story 79:沒有未完成 Task 的 Project 本來就不分配時間,不該因為別人拿了保底就被說「分不到保底」。
+test('a Project with no open Task is not warned about losing the guarantee', () => {
+  const ctx = { now: at('2026-09-15T17:00:00+08:00'), newId: sequentialIds() };
+  let state = createInitialState(ctx);
+  for (const name of ['有工作', '沒工作']) {
+    state = applyOk(state, { type: 'createProject', name, requesterId: 'req_self',
+      startDate: '2026-09-01', endDate: '2026-09-21', effortEstimateMinutes: 1500 }, ctx);
+  }
+  const [busy, idle] = state.projects.filter(p => p.kind === 'project').map(p => p.id);
+  state = applyOk(state, { type: 'createTask', projectId: busy!, title: '唯一的工作' }, ctx);
+
+  expect(getMustStartBy(state, idle!, ctx.now)! <= '2026-09-15').toBe(true);
+  expect(getSuggestedTimeBlocks(state, ctx.now).map(b => b.projectId)).toEqual([busy]);
+  expect(getDeadlineRiskWarning(state, idle!, ctx.now)!.conditions).not.toContain('guarantee_not_met');
+});
