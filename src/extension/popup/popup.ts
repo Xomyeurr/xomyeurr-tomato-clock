@@ -135,7 +135,7 @@ function footer(): HTMLElement {
           if (windowId !== undefined) void chrome.sidePanel.open({ windowId }).then(() => window.close());
         },
       },
-      '今日時間軸',
+      '開側邊欄',
     ),
   );
 }
@@ -158,6 +158,12 @@ function adHocForm(): HTMLElement {
   } }, field('插入臨時工作', title), h('button', { type: 'submit' }, '立即插入並計時'));
 }
 let currentState: AppState | null = null;
+
+function refreshSummary(): void {
+  if (!currentState) return;
+  app.querySelector('[data-summary]')?.replaceWith(summaryView(currentState, send));
+}
+
 async function render(preserve = true): Promise<void> {
   const state = await loadState();
   const restore = preserve ? preserveDrafts(app) : () => {};
@@ -182,7 +188,7 @@ setInterval(() => {
   if (stop && Date.parse(stop) <= Date.now()) void render();
   const breakEnd = app.querySelector<HTMLElement>('[data-break-ends]')?.dataset.breakEnds;
   if (breakEnd && Date.parse(breakEnd) <= Date.now()) void render();
-  if (currentState) app.querySelector('[data-summary]')?.replaceWith(summaryView(currentState, send));
+  refreshSummary();
 }, 1000);
 void chrome.windows.getCurrent().then(w => { windowId = w.id; });
 void render();

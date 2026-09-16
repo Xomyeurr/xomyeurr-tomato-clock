@@ -2,17 +2,21 @@ import { type AppState, type Command, formatTimestamp, getDaySummary, getDeadlin
 import { field, h } from './ui';
 
 type Send = (command: Command) => Promise<unknown>;
+
+export function sectionTitle(icon: string, title: string): HTMLElement {
+  return h('div', { className: 'section-title' }, h('span', { className: 'section-icon', 'aria-hidden': 'true' }, icon), h('strong', {}, title));
+}
+
 export function planningView(state: AppState, send?: Send): HTMLElement {
   const now = new Date();
   const suggestions = getSuggestedTimeBlocks(state, now);
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(now);
   const projects = state.projects.filter(p => p.kind === 'project' && p.status === 'active');
-  const taskProjects = projects.filter(p => state.tasks.some(t => t.projectId === p.id && t.status === 'open'));
   const warningLabels: Record<string, string> = {
     projected_completion_after_deadline: '預估完成日超過截止日',
     available_time_below_threshold: '截止日前可用時間低於門檻',
   };
-  return h('section', { className: 'card stack', 'data-planning': '' }, h('strong', {}, '專案排程'),
+  return h('section', { className: 'card stack theme-planning', 'data-planning': '' }, sectionTitle('P', '專案排程'),
     ...projects.map(p => {
       const weight = getScheduleWeight(state, p, now); const must = getMustStartBy(state, p.id, now); const warning = getDeadlineRiskWarning(state, p.id, now);
       const remaining = getProjectRemainingMinutes(state, p.id, now);
@@ -22,10 +26,14 @@ export function planningView(state: AppState, send?: Send): HTMLElement {
           ? `逾期預警：${warning.conditions.map(condition => warningLabels[condition] ?? condition).join('、')}（預估 ${warning.projectedCompletionDate ?? '無法完成'}；剩餘 ${Math.max(0, warning.remainingMinutes).toFixed(0)} 分鐘／可用 ${warning.availableMinutes.toFixed(0)} 分鐘）`
           : `預估完成 ${warning.projectedCompletionDate ?? '尚無法完成'}；剩餘 ${Math.max(0, warning.remainingMinutes).toFixed(0)} 分鐘／可用 ${warning.availableMinutes.toFixed(0)} 分鐘`) : null,
         remaining !== null && remaining <= 0 ? h('span', { className: 'warning small' }, '已用完預估工作量，請重新估計') : null,
-        send && suggestions.find(b => b.projectId === p.id) ? h('button', { type: 'button', className: 'small', onclick: () => { const b = suggestions.find(b => b.projectId === p.id)!; void send({ type: 'lockTimeBlock', projectId: p.id, date: b.date, start: b.start, end: b.end }); } }, '鎖定建議') : null);
+      );
     }),
-    suggestions.length ? h('div', { className: 'suggested-list' }, h('span', { className: 'small muted' }, `今天建議時段（${date}）· 可拖曳到其他建議時段以鎖定`), ...suggestions.map(b => h('div', {
-      className: 'small suggested-block', draggable: true, 'data-drop-target': '',
+    suggestions.length ? h('div', { className: 'suggested-list stack tight' }, h('span', { className: 'small muted' }, `今天建議時段（${date}）`), ...suggestions.map(b => {
+      const project = state.projects.find(p => p.id === b.projectId);
+      return h('article', {
+      className: 'suggested-block',
+      draggable: true,
+      'data-drop-target': '',
       ondragstart: (event: Event) => { (event as DragEvent).dataTransfer?.setData('application/json', JSON.stringify({ projectId: b.projectId, date: b.date })); },
       ondragover: (event: Event) => event.preventDefault(),
       ondrop: (event: Event) => {
@@ -35,13 +43,14 @@ export function planningView(state: AppState, send?: Send): HTMLElement {
         const data = JSON.parse(raw) as { projectId: string; date: string };
         void send({ type: 'lockTimeBlock', projectId: data.projectId, date: data.date, start: b.start, end: b.end });
       },
-    }, `${b.start}–${b.end} · ${state.projects.find(p => p.id === b.projectId)?.name ?? ''}`))) : h('span', { className: 'small muted' }, '今天沒有可分配的完整專注時段。'),
-    send && taskProjects.length ? h('form', { className: 'row small empty-lock-form', onsubmit: (event: Event) => {
-      event.preventDefault();
-      const project = (event.currentTarget as HTMLFormElement).querySelector<HTMLSelectElement>('select')!;
-      const inputs = (event.currentTarget as HTMLFormElement).querySelectorAll<HTMLInputElement>('input');
-      void send({ type: 'lockTimeBlock', projectId: project.value, date, start: inputs[0]!.value, end: inputs[1]!.value });
-    } }, h('span', {}, '空檔鎖定'), h('select', {}, ...taskProjects.map(p => h('option', { value: p.id }, p.name))), h('input', { type: 'time', value: '09:00', required: true }), h('span', {}, '–'), h('input', { type: 'time', value: '09:50', required: true }), h('button', { type: 'submit', className: 'small' }, '鎖定')) : null,
+    },
+    h('div', { className: 'suggested-main' },
+      h('span', { className: 'suggested-time' }, `${b.start}–${b.end}`),
+      h('strong', {}, project?.name ?? ''),
+    ),
+    send ? h('button', { type: 'button', className: 'small', onclick: () => void send({ type: 'lockTimeBlock', projectId: b.projectId, date: b.date, start: b.start, end: b.end }) }, '鎖定') : null,
+    );
+  })) : h('span', { className: 'small muted' }, '今天沒有可分配的完整專注時段。'),
     ...getLockedTimeBlocks(state, date).map(b => {
       const start = h('input', { type: 'time', value: b.start, required: true });
       const end = h('input', { type: 'time', value: b.end, required: true });
@@ -57,8 +66,8 @@ export function planningView(state: AppState, send?: Send): HTMLElement {
 export function summaryView(state: AppState, adjust?: Send): HTMLElement {
   const summary = getDaySummary(state, new Date());
   const minutes = (n: number) => `${Math.floor(n)} 分鐘`;
-  return h('section', { className: 'card stack', 'data-summary': '' },
-    h('strong', {}, `${summary.date} · 今天剩餘 ${minutes(summary.remainingMinutes)}`),
+  return h('section', { className: 'card stack theme-summary', 'data-summary': '' },
+    sectionTitle('D', `${summary.date} · 今天剩餘 ${minutes(summary.remainingMinutes)}`),
     h('div', { className: 'muted small' }, `規劃內 ${minutes(summary.plannedMinutes)} · 臨時 ${minutes(summary.adHocMinutes)} · 行程已用 ${minutes(summary.commitmentMinutes)}`),
     adjust ? h('div', { className: 'row' },
       h('span', { className: 'small muted' }, `下班時間 ±${state.settings.pomodoro.focusMinutes + state.settings.pomodoro.breakMinutes} 分鐘`),

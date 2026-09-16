@@ -2,7 +2,7 @@
 
 一個只給自己用的 Chrome 擴充套件:把「中長期專案規劃」和「每天的輕量時間管理」接在一起,讓系統告訴你「現在該做什麼」,你只要專心做事。每天的時間可以用番茄鐘或碼錶計時、事後補登,也能排入會議和時段。
 
-> 目前狀態:**批次 4(設定、資料匯出與收尾)已完成,可以安裝到 Chrome 試用。**
+> 目前狀態:**批次 5(UI 調整與修正)已完成,可以安裝到 Chrome 試用。**
 
 ## 安裝與使用教學
 
@@ -68,7 +68,7 @@ npm run build
 8. **完成番茄鐘**:時間到後打開 popup,寫一句這段做了什麼,需要的話勾「這個 Task 做完了」,再按「完成這個番茄鐘」。接著會顯示休息到幾點。
 9. **提早停止**:按「放棄」,實際做了多久一樣會記錄下來。
 
-批次 1–3 的功能已可在 Chrome 試用；剩餘批次會補上 Phase 1 的收尾工作。
+批次 1–5 的功能已可在 Chrome 試用。
 
 ### 常見問題
 
@@ -201,6 +201,12 @@ npm run build
 
 詳見 [ADR 0001](./docs/adr/0001-extension-plus-companion-process.md)。
 
+## 批次 5 可以試用的功能
+
+popup 隱藏捲軸但仍可捲動；「今天剩餘」會在 popup 開著時持續刷新。建議時段改成每一項都有自己的鎖定按鈕，不必再靠下方下拉選單找對象。側邊欄把「時間軸」移到上方，和「專案排程」分成兩個主題區塊，也新增設定入口。Chrome 的 popup 失焦自動關閉是瀏覽器平台行為；需要固定開著時，請從 popup 打開側邊欄。
+
+完整批次五變更與驗證結果見 [docs/updates/batch-5.md](./docs/updates/batch-5.md)。
+
 ## 批次 4 可以試用的功能
 
 設定頁可調整 Pomodoro、碼錶上限、Schedule Weight 因子、Must-Start-By 保底與 Deadline Risk Warning 門檻。Requester、Project、Task 和 Commitment 可封存或在沒有工作紀錄時刪除；臨時工作可升級成正式 Project。設定頁也可連接資料夾，將 Chrome 內的資料單向匯出成 `./data` JSON 檔供 AI 讀取。
@@ -215,7 +221,7 @@ npm run build
 | Phase 2 | 接入 AI(Claude / Codex)檢視排程規則合不合理;加入 Companion Process,讓觸發方式可以擴充;建議收件匣;從 Google 日曆或 Outlook 匯入行程 |
 | Phase 3 | AI 每週時間利用報告;依調整紀錄自動修正排程權重;動態排程 |
 
-Phase 1 在 GitHub 上再依里程碑分成「批次 1–4」逐步完成,每完成一個批次,就實際安裝到 Chrome 確認一次方向。
+Phase 1 在 GitHub 上再依里程碑分成批次逐步完成,每完成一個批次,就實際安裝到 Chrome 確認一次方向。
 
 ## 刻意不做的事
 
