@@ -123,3 +123,14 @@ test('summary recomputes remaining minutes as the clock advances', () => {
   expect(before).toBe(480); // 09:00–12:00 與 13:00–18:00
   expect(after).toBe(420); // 10:00 之後只剩 120 + 300 分鐘
 });
+
+// Story 70:剩餘工作量用完但 Project 還沒完成時,要持續提醒重新估計。
+test('planning view keeps asking for a re-estimate once the effort estimate is used up', () => {
+  const { state: base, ctx, projectId } = fixture();
+  let state = applyOk(base, { type: 'setEffortEstimate', projectId, value: 30, unit: 'minutes' }, ctx);
+  state = applyOk(state, { type: 'addRetroactiveEntry', taskId: state.tasks[0]!.id,
+    startedAt: '2026-09-14T09:00:00+08:00', endedAt: '2026-09-14T10:00:00+08:00', note: '' }, ctx);
+
+  const row = planningView(state).querySelector('.planning-row')!;
+  expect(row.textContent).toContain('已用完預估工作量，請重新估計');
+});
