@@ -17,14 +17,25 @@ export function planningView(state: AppState, send?: Send): HTMLElement {
       const weight = getScheduleWeight(state, p, now); const must = getMustStartBy(state, p.id, now); const warning = getDeadlineRiskWarning(state, p.id, now);
       const remaining = getProjectRemainingMinutes(state, p.id, now);
       return h('div', { className: 'planning-row' }, h('strong', {}, p.name), h('span', { className: 'small' }, `權重 ${weight.total.toFixed(2)}（截止 ${weight.deadlineUrgency.toFixed(2)} · Requester ${weight.requester.toFixed(2)} · 手動 ${weight.manualPriority.toFixed(2)}）`),
-        h('span', { className: 'small muted' }, must ? `Must-Start-By ${must}` : '無 Must-Start-By'),
+        h('span', { className: must && must <= date ? 'small warning' : 'small muted' }, must ? `Must-Start-By ${must}${must <= date ? '（今日保底）' : ''}` : '無 Must-Start-By'),
         warning ? h('span', { className: warning.conditions.length ? 'warning small' : 'small muted' }, warning.conditions.length
           ? `逾期預警：${warning.conditions.map(condition => warningLabels[condition] ?? condition).join('、')}（預估 ${warning.projectedCompletionDate ?? '無法完成'}；剩餘 ${Math.max(0, warning.remainingMinutes).toFixed(0)} 分鐘／可用 ${warning.availableMinutes.toFixed(0)} 分鐘）`
           : `預估完成 ${warning.projectedCompletionDate ?? '尚無法完成'}；剩餘 ${Math.max(0, warning.remainingMinutes).toFixed(0)} 分鐘／可用 ${warning.availableMinutes.toFixed(0)} 分鐘`) : null,
         remaining !== null && remaining <= 0 ? h('span', { className: 'warning small' }, '已用完預估工作量，請重新估計') : null,
         send && suggestions.find(b => b.projectId === p.id) ? h('button', { type: 'button', className: 'small', onclick: () => { const b = suggestions.find(b => b.projectId === p.id)!; void send({ type: 'lockTimeBlock', projectId: p.id, date: b.date, start: b.start, end: b.end }); } }, '鎖定建議') : null);
     }),
-    suggestions.length ? h('div', { className: 'suggested-list' }, h('span', { className: 'small muted' }, `今天建議時段（${date}）`), ...suggestions.map(b => h('div', { className: 'small' }, `${b.start}–${b.end} · ${state.projects.find(p => p.id === b.projectId)?.name ?? ''}`))) : h('span', { className: 'small muted' }, '今天沒有可分配的完整專注時段。'),
+    suggestions.length ? h('div', { className: 'suggested-list' }, h('span', { className: 'small muted' }, `今天建議時段（${date}）· 可拖曳到其他建議時段以鎖定`), ...suggestions.map(b => h('div', {
+      className: 'small suggested-block', draggable: true, 'data-drop-target': '',
+      ondragstart: (event: Event) => { (event as DragEvent).dataTransfer?.setData('application/json', JSON.stringify({ projectId: b.projectId, date: b.date })); },
+      ondragover: (event: Event) => event.preventDefault(),
+      ondrop: (event: Event) => {
+        event.preventDefault();
+        const raw = (event as DragEvent).dataTransfer?.getData('application/json');
+        if (!raw || !send) return;
+        const data = JSON.parse(raw) as { projectId: string; date: string };
+        void send({ type: 'lockTimeBlock', projectId: data.projectId, date: data.date, start: b.start, end: b.end });
+      },
+    }, `${b.start}–${b.end} · ${state.projects.find(p => p.id === b.projectId)?.name ?? ''}`))) : h('span', { className: 'small muted' }, '今天沒有可分配的完整專注時段。'),
     send && taskProjects.length ? h('form', { className: 'row small empty-lock-form', onsubmit: (event: Event) => {
       event.preventDefault();
       const project = (event.currentTarget as HTMLFormElement).querySelector<HTMLSelectElement>('select')!;

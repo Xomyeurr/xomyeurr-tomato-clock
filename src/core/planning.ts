@@ -107,7 +107,9 @@ export function getMustStartBy(state: AppState, projectId: string, now: Date): D
   }
   for (let i = 0; i < state.settings.mustStartBy.safetyBufferWorkdays; i++) {
     date = previousDate(found);
-    while (dayMinutes(state, date) === 0) date = previousDate(date);
+    let searched = 0;
+    while (dayMinutes(state, date) === 0 && searched++ < 367) date = previousDate(date);
+    if (searched >= 367 && dayMinutes(state, date) === 0) break;
     found = date;
   }
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(now);

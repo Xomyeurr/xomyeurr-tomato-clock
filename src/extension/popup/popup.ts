@@ -8,7 +8,7 @@ let errorMessage: string | null = null;
 let showOtherTasks = false;
 let windowId: number | undefined;
 
-const REASON_LABELS: Record<string, string> = { highestWeight: '排程權重最高', mustStartBy: '每日保底', lockedTimeBlock: '鎖定時段', noAvailableTime: '今天沒有剩餘可用時段' };
+const REASON_LABELS: Record<string, string> = { highestWeight: '排程權重最高', mustStartBy: '每日保底', lockedTimeBlock: '鎖定時段', lockedTimeBlockNoTask: '鎖定專案沒有未完成 Task，已依一般規則推薦', noAvailableTime: '今天沒有剩餘可用時段' };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const mmss = (seconds: number) => `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;

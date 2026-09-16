@@ -7,7 +7,7 @@ export interface Recommendation {
   taskTitle: string;
   projectId: string;
   projectName: string;
-  reason: 'highestWeight' | 'mustStartBy' | 'lockedTimeBlock' | 'noAvailableTime';
+  reason: 'highestWeight' | 'mustStartBy' | 'lockedTimeBlock' | 'lockedTimeBlockNoTask' | 'noAvailableTime';
   score: number;
 }
 
@@ -35,10 +35,12 @@ export function getNextTask(state: AppState, now: Date): Recommendation | null {
   const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone }).format(now);
   const current = now.toLocaleTimeString('en-GB', { timeZone: state.settings.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const locked = getLockedTimeBlocks(state, localDate).find(b => b.start <= current && current < b.end);
+  let lockedWithoutTask = false;
   if (locked) {
     const lockedTasks = startable.filter(t => t.projectId === locked.projectId);
     const task = pickTask(state, lockedTasks);
     if (task) return { taskId: task.id, taskTitle: task.title, projectId: locked.projectId, projectName: state.projects.find(p => p.id === locked.projectId)?.name ?? '', reason: 'lockedTimeBlock', score: getScheduleWeight(state, state.projects.find(p => p.id === locked.projectId)!, now).total };
+    lockedWithoutTask = true;
   }
   const suggested = getSuggestedTimeBlocks(state, now)[0];
   if (suggested) {
@@ -46,8 +48,9 @@ export function getNextTask(state: AppState, now: Date): Recommendation | null {
     const task = pickTask(state, suggestedTasks);
     const project = state.projects.find(p => p.id === suggested.projectId);
     if (task && project) {
+      const must = getMustStartBy(state, project.id, now);
       return { taskId: task.id, taskTitle: task.title, projectId: project.id, projectName: project.name,
-        reason: 'highestWeight', score: getScheduleWeight(state, project, now).total };
+        reason: lockedWithoutTask ? 'lockedTimeBlockNoTask' : must !== null && must <= localDate ? 'mustStartBy' : 'highestWeight', score: getScheduleWeight(state, project, now).total };
     }
   }
   let best: { project: Project; score: number; must: boolean } | undefined;
@@ -68,7 +71,7 @@ export function getNextTask(state: AppState, now: Date): Recommendation | null {
     taskTitle: task.title,
     projectId: chosen.project.id,
     projectName: chosen.project.name,
-    reason: suggested ? (chosen.must ? 'mustStartBy' : 'highestWeight') : 'noAvailableTime',
+    reason: lockedWithoutTask ? 'lockedTimeBlockNoTask' : suggested ? (chosen.must ? 'mustStartBy' : 'highestWeight') : 'noAvailableTime',
     score: chosen.score,
   };
 }

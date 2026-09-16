@@ -38,3 +38,11 @@ test('locked block controls recommendation, moving creates another snapshot and 
   expect(state.overrides).toHaveLength(before);
   expect(getNextTask(state, at('2026-09-15T09:10:00+08:00'))?.projectId).toBe(first);
 });
+
+test('locked project without open Tasks explains fallback to general recommendation', () => {
+  const { state: initial, ctx, first } = setup();
+  let state = applyOk(initial, { type: 'createProject', name: '空專案', requesterId: 'req_self', startDate: '2026-09-15' }, ctx);
+  const emptyProject = state.projects[3]!.id;
+  state = applyOk(state, { type: 'lockTimeBlock', projectId: emptyProject, date: '2026-09-15', start: '09:00', end: '09:50' }, ctx);
+  expect(getNextTask(state, at('2026-09-15T09:10:00+08:00'))).toMatchObject({ projectId: first, reason: 'lockedTimeBlockNoTask' });
+});

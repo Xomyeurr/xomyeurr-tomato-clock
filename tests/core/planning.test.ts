@@ -53,3 +53,10 @@ test('invalid estimate and deadline thresholds are rejected', () => {
   expect(apply(state, { type: 'setEffortEstimate', projectId, value: 0, unit: 'hours' }, ctx).ok).toBe(false);
   expect(apply(state, { type: 'setDeadlineRiskThreshold', projectId, lateDays: -1 }, ctx).ok).toBe(false);
 });
+
+test('Must-Start-By remains finite when the weekly work template has no workdays', () => {
+  const { state: initial, ctx, projectId } = setup();
+  const state = applyOk(initial, { type: 'setEffortEstimate', projectId, value: 50, unit: 'minutes' }, ctx);
+  const noWorkdays = { ...state, workHours: { ...state.workHours, weekly: { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] } } };
+  expect(getMustStartBy(noWorkdays, projectId, ctx.now)).toBe('2026-09-18');
+});
